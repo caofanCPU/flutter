@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -26,7 +26,8 @@ import 'package:flutter/rendering.dart';
 ///
 ///  * [ThemeData], which describes the overall theme information for the
 ///    application.
-class FloatingActionButtonThemeData extends Diagnosticable {
+@immutable
+class FloatingActionButtonThemeData with Diagnosticable {
   /// Creates a theme that can be used for
   /// [ThemeData.floatingActionButtonTheme].
   const FloatingActionButtonThemeData({
@@ -34,6 +35,7 @@ class FloatingActionButtonThemeData extends Diagnosticable {
     this.backgroundColor,
     this.focusColor,
     this.hoverColor,
+    this.splashColor,
     this.elevation,
     this.focusElevation,
     this.hoverElevation,
@@ -56,6 +58,9 @@ class FloatingActionButtonThemeData extends Diagnosticable {
   /// The color to use for filling the button when the button has a pointer
   /// hovering over it.
   final Color hoverColor;
+
+  /// The splash color for this [FloatingActionButton]'s [InkWell].
+  final Color splashColor;
 
   /// The z-coordinate to be used for the unselected, enabled
   /// [FloatingActionButton]'s elevation foreground.
@@ -91,6 +96,7 @@ class FloatingActionButtonThemeData extends Diagnosticable {
     Color backgroundColor,
     Color focusColor,
     Color hoverColor,
+    Color splashColor,
     double elevation,
     double focusElevation,
     double hoverElevation,
@@ -103,6 +109,7 @@ class FloatingActionButtonThemeData extends Diagnosticable {
       backgroundColor: backgroundColor ?? this.backgroundColor,
       focusColor: focusColor ?? this.focusColor,
       hoverColor: hoverColor ?? this.hoverColor,
+      splashColor: splashColor ?? this.splashColor,
       elevation: elevation ?? this.elevation,
       focusElevation: focusElevation ?? this.focusElevation,
       hoverElevation: hoverElevation ?? this.hoverElevation,
@@ -126,6 +133,7 @@ class FloatingActionButtonThemeData extends Diagnosticable {
       backgroundColor: Color.lerp(a?.backgroundColor, b?.backgroundColor, t),
       focusColor: Color.lerp(a?.focusColor, b?.focusColor, t),
       hoverColor: Color.lerp(a?.hoverColor, b?.hoverColor, t),
+      splashColor: Color.lerp(a?.splashColor, b?.splashColor, t),
       elevation: lerpDouble(a?.elevation, b?.elevation, t),
       focusElevation: lerpDouble(a?.focusElevation, b?.focusElevation, t),
       hoverElevation: lerpDouble(a?.hoverElevation, b?.hoverElevation, t),
@@ -142,6 +150,7 @@ class FloatingActionButtonThemeData extends Diagnosticable {
       backgroundColor,
       focusColor,
       hoverColor,
+      splashColor,
       elevation,
       focusElevation,
       hoverElevation,
@@ -157,17 +166,18 @@ class FloatingActionButtonThemeData extends Diagnosticable {
       return true;
     if (other.runtimeType != runtimeType)
       return false;
-    final FloatingActionButtonThemeData otherData = other;
-    return otherData.foregroundColor == foregroundColor
-        && otherData.backgroundColor == backgroundColor
-        && otherData.focusColor == focusColor
-        && otherData.hoverColor == hoverColor
-        && otherData.elevation == elevation
-        && otherData.focusElevation == focusElevation
-        && otherData.hoverElevation == hoverElevation
-        && otherData.disabledElevation == disabledElevation
-        && otherData.highlightElevation == highlightElevation
-        && otherData.shape == shape;
+    return other is FloatingActionButtonThemeData
+        && other.foregroundColor == foregroundColor
+        && other.backgroundColor == backgroundColor
+        && other.focusColor == focusColor
+        && other.hoverColor == hoverColor
+        && other.splashColor == splashColor
+        && other.elevation == elevation
+        && other.focusElevation == focusElevation
+        && other.hoverElevation == hoverElevation
+        && other.disabledElevation == disabledElevation
+        && other.highlightElevation == highlightElevation
+        && other.shape == shape;
   }
 
   @override
@@ -179,6 +189,7 @@ class FloatingActionButtonThemeData extends Diagnosticable {
     properties.add(ColorProperty('backgroundColor', backgroundColor, defaultValue: defaultData.backgroundColor));
     properties.add(ColorProperty('focusColor', focusColor, defaultValue: defaultData.focusColor));
     properties.add(ColorProperty('hoverColor', hoverColor, defaultValue: defaultData.hoverColor));
+    properties.add(ColorProperty('splashColor', splashColor, defaultValue: defaultData.splashColor));
     properties.add(DoubleProperty('elevation', elevation, defaultValue: defaultData.elevation));
     properties.add(DoubleProperty('focusElevation', focusElevation, defaultValue: defaultData.focusElevation));
     properties.add(DoubleProperty('hoverElevation', hoverElevation, defaultValue: defaultData.hoverElevation));

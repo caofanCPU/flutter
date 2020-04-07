@@ -1,4 +1,4 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,34 +6,26 @@ import 'dart:async';
 
 import 'package:file/file.dart';
 import 'package:file/memory.dart';
+import 'package:mockito/mockito.dart';
+import 'package:platform/platform.dart';
+
 import 'package:flutter_tools/src/application_package.dart';
 import 'package:flutter_tools/src/artifacts.dart';
 import 'package:flutter_tools/src/base/file_system.dart';
 import 'package:flutter_tools/src/base/io.dart';
+import 'package:flutter_tools/src/base/logger.dart';
+import 'package:flutter_tools/src/build_info.dart';
 import 'package:flutter_tools/src/cache.dart';
 import 'package:flutter_tools/src/device.dart';
 import 'package:flutter_tools/src/ios/devices.dart';
 import 'package:flutter_tools/src/ios/mac.dart';
+import 'package:flutter_tools/src/ios/ios_deploy.dart';
+import 'package:flutter_tools/src/ios/ios_workflow.dart';
 import 'package:flutter_tools/src/macos/xcode.dart';
-import 'package:flutter_tools/src/project.dart';
-import 'package:mockito/mockito.dart';
-import 'package:platform/platform.dart';
-import 'package:process/process.dart';
 
 import '../../src/common.dart';
 import '../../src/context.dart';
 import '../../src/mocks.dart';
-
-class MockIOSApp extends Mock implements IOSApp {}
-class MockArtifacts extends Mock implements Artifacts {}
-class MockCache extends Mock implements Cache {}
-class MockDirectory extends Mock implements Directory {}
-class MockFileSystem extends Mock implements FileSystem {}
-class MockIMobileDevice extends Mock implements IMobileDevice {}
-class MockProcessManager extends Mock implements ProcessManager {}
-class MockXcode extends Mock implements Xcode {}
-class MockFile extends Mock implements File {}
-class MockProcess extends Mock implements Process {}
 
 void main() {
   final FakePlatform macPlatform = FakePlatform.fromPlatform(const LocalPlatform());
@@ -45,326 +37,347 @@ void main() {
 
   group('IOSDevice', () {
     final List<Platform> unsupportedPlatforms = <Platform>[linuxPlatform, windowsPlatform];
+    Artifacts mockArtifacts;
+    MockCache mockCache;
+    Logger logger;
+    IOSDeploy iosDeploy;
+    IMobileDevice iMobileDevice;
+    FileSystem mockFileSystem;
 
-    testUsingContext('successfully instantiates on Mac OS', () {
-      IOSDevice('device-123');
-    }, overrides: <Type, Generator>{
-      Platform: () => macPlatform,
+    setUp(() {
+      mockArtifacts = MockArtifacts();
+      mockCache = MockCache();
+      const MapEntry<String, String> dyLdLibEntry = MapEntry<String, String>('DYLD_LIBRARY_PATH', '/path/to/libs');
+      when(mockCache.dyLdLibEntry).thenReturn(dyLdLibEntry);
+      logger = BufferLogger.test();
+      iosDeploy = IOSDeploy(
+        artifacts: mockArtifacts,
+        cache: mockCache,
+        logger: logger,
+        platform: macPlatform,
+        processManager: FakeProcessManager.any(),
+      );
+      iMobileDevice = IMobileDevice(
+        artifacts: mockArtifacts,
+        cache: mockCache,
+        logger: logger,
+        processManager: FakeProcessManager.any(),
+      );
     });
 
-    for (Platform platform in unsupportedPlatforms) {
-      testUsingContext('throws UnsupportedError exception if instantiated on ${platform.operatingSystem}', () {
+    testWithoutContext('successfully instantiates on Mac OS', () {
+      IOSDevice(
+        'device-123',
+        artifacts: mockArtifacts,
+        fileSystem: mockFileSystem,
+        logger: logger,
+        platform: macPlatform,
+        iosDeploy: iosDeploy,
+        iMobileDevice: iMobileDevice,
+        name: 'iPhone 1',
+        sdkVersion: '13.3',
+        cpuArchitecture: DarwinArch.arm64
+      );
+    });
+
+    testWithoutContext('parses major version', () {
+      expect(IOSDevice(
+        'device-123',
+        artifacts: mockArtifacts,
+        fileSystem: mockFileSystem,
+        logger: logger,
+        platform: macPlatform,
+        iosDeploy: iosDeploy,
+        iMobileDevice: iMobileDevice,
+        name: 'iPhone 1',
+        cpuArchitecture: DarwinArch.arm64,
+        sdkVersion: '1.0.0'
+      ).majorSdkVersion, 1);
+      expect(IOSDevice(
+        'device-123',
+        artifacts: mockArtifacts,
+        fileSystem: mockFileSystem,
+        logger: logger,
+        platform: macPlatform,
+        iosDeploy: iosDeploy,
+        iMobileDevice: iMobileDevice,
+        name: 'iPhone 1',
+        cpuArchitecture: DarwinArch.arm64,
+        sdkVersion: '13.1.1'
+      ).majorSdkVersion, 13);
+      expect(IOSDevice(
+        'device-123',
+        artifacts: mockArtifacts,
+        fileSystem: mockFileSystem,
+        logger: logger,
+        platform: macPlatform,
+        iosDeploy: iosDeploy,
+        iMobileDevice: iMobileDevice,
+        name: 'iPhone 1',
+        cpuArchitecture: DarwinArch.arm64,
+        sdkVersion: '10'
+      ).majorSdkVersion, 10);
+      expect(IOSDevice(
+        'device-123',
+        artifacts: mockArtifacts,
+        fileSystem: mockFileSystem,
+        logger: logger,
+        platform: macPlatform,
+        iosDeploy: iosDeploy,
+        iMobileDevice: iMobileDevice,
+        name: 'iPhone 1',
+        cpuArchitecture: DarwinArch.arm64,
+        sdkVersion: '0'
+      ).majorSdkVersion, 0);
+      expect(IOSDevice(
+        'device-123',
+        artifacts: mockArtifacts,
+        fileSystem: mockFileSystem,
+        logger: logger,
+        platform: macPlatform,
+        iosDeploy: iosDeploy,
+        iMobileDevice: iMobileDevice,
+        name: 'iPhone 1',
+        cpuArchitecture: DarwinArch.arm64,
+        sdkVersion: 'bogus'
+      ).majorSdkVersion, 0);
+    });
+
+    for (final Platform platform in unsupportedPlatforms) {
+      testWithoutContext('throws UnsupportedError exception if instantiated on ${platform.operatingSystem}', () {
         expect(
-            () { IOSDevice('device-123'); },
-            throwsA(isInstanceOf<AssertionError>())
+          () {
+            IOSDevice(
+              'device-123',
+              artifacts: mockArtifacts,
+              fileSystem: mockFileSystem,
+              logger: logger,
+              platform: platform,
+              iosDeploy: iosDeploy,
+              iMobileDevice: iMobileDevice,
+              name: 'iPhone 1',
+              sdkVersion: '13.3',
+              cpuArchitecture: DarwinArch.arm64,
+            );
+          },
+          throwsAssertionError,
         );
-      }, overrides: <Type, Generator>{
-        Platform: () => platform,
       });
     }
 
-    group('Process calls', () {
-      MockIOSApp mockApp;
-      MockArtifacts mockArtifacts;
+    group('.dispose()', () {
+      IOSDevice device;
+      MockIOSApp appPackage1;
+      MockIOSApp appPackage2;
+      IOSDeviceLogReader logReader1;
+      IOSDeviceLogReader logReader2;
+      MockProcess mockProcess1;
+      MockProcess mockProcess2;
+      MockProcess mockProcess3;
+      IOSDevicePortForwarder portForwarder;
+      ForwardedPort forwardedPort;
+      Artifacts mockArtifacts;
       MockCache mockCache;
-      MockFileSystem mockFileSystem;
-      MockProcessManager mockProcessManager;
-      const String installerPath = '/path/to/ideviceinstaller';
-      const String appId = '789';
-      const MapEntry<String, String> libraryEntry = MapEntry<String, String>(
-          'DYLD_LIBRARY_PATH',
-          '/path/to/libraries'
-      );
-      final Map<String, String> env = Map<String, String>.fromEntries(
-          <MapEntry<String, String>>[libraryEntry]
-      );
+      Logger logger;
+      IOSDeploy iosDeploy;
+      FileSystem mockFileSystem;
+
+      IOSDevicePortForwarder createPortForwarder(
+          ForwardedPort forwardedPort,
+          IOSDevice device) {
+        final IOSDevicePortForwarder portForwarder = IOSDevicePortForwarder(
+          dyLdLibEntry: mockCache.dyLdLibEntry,
+          id: device.id,
+          iproxyPath: mockArtifacts.getArtifactPath(Artifact.iproxy, platform: TargetPlatform.ios),
+          logger: logger,
+          processManager: FakeProcessManager.any(),
+        );
+        portForwarder.addForwardedPorts(<ForwardedPort>[forwardedPort]);
+        return portForwarder;
+      }
+
+      IOSDeviceLogReader createLogReader(
+          IOSDevice device,
+          IOSApp appPackage,
+          Process process) {
+        final IOSDeviceLogReader logReader = IOSDeviceLogReader.create(
+          device: device,
+          app: appPackage,
+          iMobileDevice: null, // not used by this test.
+        );
+        logReader.idevicesyslogProcess = process;
+        return logReader;
+      }
 
       setUp(() {
-        mockApp = MockIOSApp();
+        appPackage1 = MockIOSApp();
+        appPackage2 = MockIOSApp();
+        when(appPackage1.name).thenReturn('flutterApp1');
+        when(appPackage2.name).thenReturn('flutterApp2');
+        mockProcess1 = MockProcess();
+        mockProcess2 = MockProcess();
+        mockProcess3 = MockProcess();
+        forwardedPort = ForwardedPort.withContext(123, 456, mockProcess3);
         mockArtifacts = MockArtifacts();
         mockCache = MockCache();
-        when(mockCache.dyLdLibEntry).thenReturn(libraryEntry);
-        mockFileSystem = MockFileSystem();
-        mockProcessManager = MockProcessManager();
-        when(
-            mockArtifacts.getArtifactPath(
-                Artifact.ideviceinstaller,
-                platform: anyNamed('platform'),
-            )
-        ).thenReturn(installerPath);
+        iosDeploy = IOSDeploy(
+          artifacts: mockArtifacts,
+          cache: mockCache,
+          logger: logger,
+          platform: macPlatform,
+          processManager: FakeProcessManager.any(),
+        );
       });
 
-      testUsingContext('installApp() invokes process with correct environment', () async {
-        final IOSDevice device = IOSDevice('123');
-        const String bundlePath = '/path/to/bundle';
-        final List<String> args = <String>[installerPath, '-i', bundlePath];
-        when(mockApp.deviceBundlePath).thenReturn(bundlePath);
-        final MockDirectory directory = MockDirectory();
-        when(mockFileSystem.directory(bundlePath)).thenReturn(directory);
-        when(directory.existsSync()).thenReturn(true);
-        when(mockProcessManager.run(args, environment: env))
-            .thenAnswer(
-                (_) => Future<ProcessResult>.value(ProcessResult(1, 0, '', ''))
-            );
-        await device.installApp(mockApp);
-        verify(mockProcessManager.run(args, environment: env));
-      }, overrides: <Type, Generator>{
-        Artifacts: () => mockArtifacts,
-        Cache: () => mockCache,
-        FileSystem: () => mockFileSystem,
-        Platform: () => macPlatform,
-        ProcessManager: () => mockProcessManager,
-      });
+      testWithoutContext('kills all log readers & port forwarders', () async {
+        device = IOSDevice(
+          '123',
+          artifacts: mockArtifacts,
+          fileSystem: mockFileSystem,
+          logger: logger,
+          platform: macPlatform,
+          iosDeploy: iosDeploy,
+          iMobileDevice: iMobileDevice,
+          name: 'iPhone 1',
+          sdkVersion: '13.3',
+          cpuArchitecture: DarwinArch.arm64,
+        );
+        logReader1 = createLogReader(device, appPackage1, mockProcess1);
+        logReader2 = createLogReader(device, appPackage2, mockProcess2);
+        portForwarder = createPortForwarder(forwardedPort, device);
+        device.setLogReader(appPackage1, logReader1);
+        device.setLogReader(appPackage2, logReader2);
+        device.portForwarder = portForwarder;
 
-      testUsingContext('isAppInstalled() invokes process with correct environment', () async {
-        final IOSDevice device = IOSDevice('123');
-        final List<String> args = <String>[installerPath, '--list-apps'];
-        when(mockProcessManager.run(args, environment: env))
-            .thenAnswer(
-                (_) => Future<ProcessResult>.value(ProcessResult(1, 0, '', ''))
-            );
-        when(mockApp.id).thenReturn(appId);
-        await device.isAppInstalled(mockApp);
-        verify(mockProcessManager.run(args, environment: env));
-      }, overrides: <Type, Generator>{
-        Artifacts: () => mockArtifacts,
-        Cache: () => mockCache,
-        Platform: () => macPlatform,
-        ProcessManager: () => mockProcessManager,
-      });
+        await device.dispose();
 
-      testUsingContext('uninstallApp() invokes process with correct environment', () async {
-        final IOSDevice device = IOSDevice('123');
-        final List<String> args = <String>[installerPath, '-U', appId];
-        when(mockApp.id).thenReturn(appId);
-        when(mockProcessManager.run(args, environment: env))
-            .thenAnswer(
-                (_) => Future<ProcessResult>.value(ProcessResult(1, 0, '', ''))
-            );
-        await device.uninstallApp(mockApp);
-        verify(mockProcessManager.run(args, environment: env));
-      }, overrides: <Type, Generator>{
-        Artifacts: () => mockArtifacts,
-        Cache: () => mockCache,
-        Platform: () => macPlatform,
-        ProcessManager: () => mockProcessManager,
+        verify(mockProcess1.kill());
+        verify(mockProcess2.kill());
+        verify(mockProcess3.kill());
       });
     });
   });
 
-  group('getAttachedDevices', () {
-    MockIMobileDevice mockIMobileDevice;
+  group('pollingGetDevices', () {
+    MockXcdevice mockXcdevice;
+    MockArtifacts mockArtifacts;
+    MockCache mockCache;
+    FakeProcessManager fakeProcessManager;
+    Logger logger;
+    IOSDeploy iosDeploy;
+    IMobileDevice iMobileDevice;
+    IOSWorkflow mockIosWorkflow;
 
     setUp(() {
-      mockIMobileDevice = MockIMobileDevice();
-    });
-
-    testUsingContext('return no devices if Xcode is not installed', () async {
-      when(mockIMobileDevice.isInstalled).thenReturn(false);
-      expect(await IOSDevice.getAttachedDevices(), isEmpty);
-    }, overrides: <Type, Generator>{
-      IMobileDevice: () => mockIMobileDevice,
-      Platform: () => macPlatform,
-    });
-
-    testUsingContext('returns no devices if none are attached', () async {
-      when(iMobileDevice.isInstalled).thenReturn(true);
-      when(iMobileDevice.getAvailableDeviceIDs())
-          .thenAnswer((Invocation invocation) => Future<String>.value(''));
-      final List<IOSDevice> devices = await IOSDevice.getAttachedDevices();
-      expect(devices, isEmpty);
-    }, overrides: <Type, Generator>{
-      IMobileDevice: () => mockIMobileDevice,
-      Platform: () => macPlatform,
+      mockXcdevice = MockXcdevice();
+      mockArtifacts = MockArtifacts();
+      mockCache = MockCache();
+      logger = BufferLogger.test();
+      mockIosWorkflow = MockIOSWorkflow();
+      fakeProcessManager = FakeProcessManager.any();
+      iosDeploy = IOSDeploy(
+        artifacts: mockArtifacts,
+        cache: mockCache,
+        logger: logger,
+        platform: macPlatform,
+        processManager: fakeProcessManager,
+      );
+      iMobileDevice = IMobileDevice(
+        artifacts: mockArtifacts,
+        cache: mockCache,
+        processManager: fakeProcessManager,
+        logger: logger,
+      );
     });
 
     final List<Platform> unsupportedPlatforms = <Platform>[linuxPlatform, windowsPlatform];
-    for (Platform platform in unsupportedPlatforms) {
-      testUsingContext('throws Unsupported Operation exception on ${platform.operatingSystem}', () async {
-        when(iMobileDevice.isInstalled).thenReturn(false);
-        when(iMobileDevice.getAvailableDeviceIDs())
-            .thenAnswer((Invocation invocation) => Future<String>.value(''));
-        expect(
-            () async { await IOSDevice.getAttachedDevices(); },
-            throwsA(isInstanceOf<UnsupportedError>()),
+    for (final Platform unsupportedPlatform in unsupportedPlatforms) {
+      testWithoutContext('throws Unsupported Operation exception on ${unsupportedPlatform.operatingSystem}', () async {
+        final IOSDevices iosDevices = IOSDevices(
+          platform: unsupportedPlatform,
+          xcdevice: mockXcdevice,
+          iosWorkflow: mockIosWorkflow,
         );
-      }, overrides: <Type, Generator>{
-        IMobileDevice: () => mockIMobileDevice,
-        Platform: () => platform,
+        when(mockXcdevice.isInstalled).thenReturn(false);
+        expect(
+            () async { await iosDevices.pollingGetDevices(); },
+            throwsA(isA<UnsupportedError>()),
+        );
       });
     }
 
-    testUsingContext('returns attached devices', () async {
-      when(iMobileDevice.isInstalled).thenReturn(true);
-      when(iMobileDevice.getAvailableDeviceIDs())
-          .thenAnswer((Invocation invocation) => Future<String>.value('''
-98206e7a4afd4aedaff06e687594e089dede3c44
-f577a7903cc54959be2e34bc4f7f80b7009efcf4
-'''));
-      when(iMobileDevice.getInfoForDevice('98206e7a4afd4aedaff06e687594e089dede3c44', 'DeviceName'))
-          .thenAnswer((_) => Future<String>.value('La tele me regarde'));
-      when(iMobileDevice.getInfoForDevice('98206e7a4afd4aedaff06e687594e089dede3c44', 'ProductVersion'))
-          .thenAnswer((_) => Future<String>.value('10.3.2'));
-      when(iMobileDevice.getInfoForDevice('f577a7903cc54959be2e34bc4f7f80b7009efcf4', 'DeviceName'))
-          .thenAnswer((_) => Future<String>.value('Puits sans fond'));
-      when(iMobileDevice.getInfoForDevice('f577a7903cc54959be2e34bc4f7f80b7009efcf4', 'ProductVersion'))
-          .thenAnswer((_) => Future<String>.value('11.0'));
-      final List<IOSDevice> devices = await IOSDevice.getAttachedDevices();
-      expect(devices, hasLength(2));
-      expect(devices[0].id, '98206e7a4afd4aedaff06e687594e089dede3c44');
-      expect(devices[0].name, 'La tele me regarde');
-      expect(devices[1].id, 'f577a7903cc54959be2e34bc4f7f80b7009efcf4');
-      expect(devices[1].name, 'Puits sans fond');
-    }, overrides: <Type, Generator>{
-      IMobileDevice: () => mockIMobileDevice,
-      Platform: () => macPlatform,
-    });
+    testWithoutContext('returns attached devices', () async {
+      final IOSDevices iosDevices = IOSDevices(
+        platform: macPlatform,
+        xcdevice: mockXcdevice,
+        iosWorkflow: mockIosWorkflow,
+      );
+      when(mockXcdevice.isInstalled).thenReturn(true);
 
-    testUsingContext('returns attached devices and ignores devices that cannot be found by ideviceinfo', () async {
-      when(iMobileDevice.isInstalled).thenReturn(true);
-      when(iMobileDevice.getAvailableDeviceIDs())
-          .thenAnswer((Invocation invocation) => Future<String>.value('''
-98206e7a4afd4aedaff06e687594e089dede3c44
-f577a7903cc54959be2e34bc4f7f80b7009efcf4
-'''));
-      when(iMobileDevice.getInfoForDevice('98206e7a4afd4aedaff06e687594e089dede3c44', 'DeviceName'))
-          .thenAnswer((_) => Future<String>.value('La tele me regarde'));
-      when(iMobileDevice.getInfoForDevice('f577a7903cc54959be2e34bc4f7f80b7009efcf4', 'DeviceName'))
-          .thenThrow(IOSDeviceNotFoundError('Device not found'));
-      final List<IOSDevice> devices = await IOSDevice.getAttachedDevices();
+      final IOSDevice device = IOSDevice(
+        'd83d5bc53967baa0ee18626ba87b6254b2ab5418',
+        name: 'Paired iPhone',
+        sdkVersion: '13.3',
+        cpuArchitecture: DarwinArch.arm64,
+        artifacts: mockArtifacts,
+        iosDeploy: iosDeploy,
+        iMobileDevice: iMobileDevice,
+        logger: logger,
+        platform: macPlatform,
+        fileSystem: MemoryFileSystem.test(),
+      );
+      when(mockXcdevice.getAvailableTetheredIOSDevices())
+          .thenAnswer((Invocation invocation) => Future<List<IOSDevice>>.value(<IOSDevice>[device]));
+
+      final List<Device> devices = await iosDevices.pollingGetDevices();
       expect(devices, hasLength(1));
-      expect(devices[0].id, '98206e7a4afd4aedaff06e687594e089dede3c44');
-      expect(devices[0].name, 'La tele me regarde');
-    }, overrides: <Type, Generator>{
-      IMobileDevice: () => mockIMobileDevice,
-      Platform: () => macPlatform,
+      expect(identical(devices.first, device), isTrue);
     });
   });
 
-  group('decodeSyslog', () {
-    test('decodes a syslog-encoded line', () {
-      final String decoded = decodeSyslog(r'I \M-b\M^]\M-$\M-o\M-8\M^O syslog \M-B\M-/\134_(\M-c\M^C\M^D)_/\M-B\M-/ \M-l\M^F\240!');
-      expect(decoded, r'I ❤️ syslog ¯\_(ツ)_/¯ 솠!');
-    });
-
-    test('passes through un-decodeable lines as-is', () {
-      final String decoded = decodeSyslog(r'I \M-b\M^O syslog!');
-      expect(decoded, r'I \M-b\M^O syslog!');
-    });
-  });
-  group('logging', () {
-    MockIMobileDevice mockIMobileDevice;
-    MockIosProject mockIosProject;
+  group('getDiagnostics', () {
+    MockXcdevice mockXcdevice;
+    IOSWorkflow mockIosWorkflow;
 
     setUp(() {
-      mockIMobileDevice = MockIMobileDevice();
-      mockIosProject = MockIosProject();
+      mockXcdevice = MockXcdevice();
+      mockIosWorkflow = MockIOSWorkflow();
     });
 
-    testUsingContext('suppresses non-Flutter lines from output', () async {
-      when(mockIMobileDevice.startLogger('123456')).thenAnswer((Invocation invocation) {
-        final Process mockProcess = MockProcess();
-        when(mockProcess.stdout).thenAnswer((Invocation invocation) =>
-            Stream<List<int>>.fromIterable(<List<int>>['''
-  Runner(Flutter)[297] <Notice>: A is for ari
-  Runner(libsystem_asl.dylib)[297] <Notice>: libMobileGestalt MobileGestaltSupport.m:153: pid 123 (Runner) does not have sandbox access for frZQaeyWLUvLjeuEK43hmg and IS NOT appropriately entitled
-  Runner(libsystem_asl.dylib)[297] <Notice>: libMobileGestalt MobileGestalt.c:550: no access to InverseDeviceID (see <rdar://problem/11744455>)
-  Runner(Flutter)[297] <Notice>: I is for ichigo
-  Runner(UIKit)[297] <Notice>: E is for enpitsu"
-  '''.codeUnits]));
-        when(mockProcess.stderr)
-            .thenAnswer((Invocation invocation) => const Stream<List<int>>.empty());
-        // Delay return of exitCode until after stdout stream data, since it terminates the logger.
-        when(mockProcess.exitCode)
-            .thenAnswer((Invocation invocation) => Future<int>.delayed(Duration.zero, () => 0));
-        return Future<Process>.value(mockProcess);
+    final List<Platform> unsupportedPlatforms = <Platform>[linuxPlatform, windowsPlatform];
+    for (final Platform unsupportedPlatform in unsupportedPlatforms) {
+      testWithoutContext('throws returns platform diagnostic exception on ${unsupportedPlatform.operatingSystem}', () async {
+        final IOSDevices iosDevices = IOSDevices(
+          platform: unsupportedPlatform,
+          xcdevice: mockXcdevice,
+          iosWorkflow: mockIosWorkflow,
+        );
+        when(mockXcdevice.isInstalled).thenReturn(false);
+        expect((await iosDevices.getDiagnostics()).first, 'Control of iOS devices or simulators only supported on macOS.');
       });
+    }
 
-      final IOSDevice device = IOSDevice('123456');
-      final DeviceLogReader logReader = device.getLogReader(
-        app: BuildableIOSApp(mockIosProject),
+    testWithoutContext('returns diagnostics', () async {
+      final IOSDevices iosDevices = IOSDevices(
+        platform: macPlatform,
+        xcdevice: mockXcdevice,
+        iosWorkflow: mockIosWorkflow,
       );
+      when(mockXcdevice.isInstalled).thenReturn(true);
+      when(mockXcdevice.getDiagnostics())
+          .thenAnswer((Invocation invocation) => Future<List<String>>.value(<String>['Generic pairing error']));
 
-      final List<String> lines = await logReader.logLines.toList();
-      expect(lines, <String>['A is for ari', 'I is for ichigo']);
-    }, overrides: <Type, Generator>{
-      IMobileDevice: () => mockIMobileDevice,
-      Platform: () => macPlatform,
+      final List<String> diagnostics = await iosDevices.getDiagnostics();
+      expect(diagnostics, hasLength(1));
+      expect(diagnostics.first, 'Generic pairing error');
     });
-    testUsingContext('includes multi-line Flutter logs in the output', () async {
-      when(mockIMobileDevice.startLogger('123456')).thenAnswer((Invocation invocation) {
-        final Process mockProcess = MockProcess();
-        when(mockProcess.stdout).thenAnswer((Invocation invocation) =>
-            Stream<List<int>>.fromIterable(<List<int>>['''
-  Runner(Flutter)[297] <Notice>: This is a multi-line message,
-  with another Flutter message following it.
-  Runner(Flutter)[297] <Notice>: This is a multi-line message,
-  with a non-Flutter log message following it.
-  Runner(libsystem_asl.dylib)[297] <Notice>: libMobileGestalt
-  '''.codeUnits]));
-        when(mockProcess.stderr)
-            .thenAnswer((Invocation invocation) => const Stream<List<int>>.empty());
-        // Delay return of exitCode until after stdout stream data, since it terminates the logger.
-        when(mockProcess.exitCode)
-            .thenAnswer((Invocation invocation) => Future<int>.delayed(Duration.zero, () => 0));
-        return Future<Process>.value(mockProcess);
-      });
-
-      final IOSDevice device = IOSDevice('123456');
-      final DeviceLogReader logReader = device.getLogReader(
-        app: BuildableIOSApp(mockIosProject),
-      );
-
-      final List<String> lines = await logReader.logLines.toList();
-      expect(lines, <String>[
-        'This is a multi-line message,',
-        '  with another Flutter message following it.',
-        'This is a multi-line message,',
-        '  with a non-Flutter log message following it.',
-      ]);
-      expect(device.category, Category.mobile);
-    }, overrides: <Type, Generator>{
-      IMobileDevice: () => mockIMobileDevice,
-      Platform: () => macPlatform,
-    });
-  });
-  testUsingContext('IOSDevice.isSupportedForProject is true on module project', () async {
-    fs.file('pubspec.yaml')
-      ..createSync()
-      ..writeAsStringSync(r'''
-name: example
-
-flutter:
-  module: {}
-''');
-    fs.file('.packages').createSync();
-    final FlutterProject flutterProject = FlutterProject.current();
-
-    expect(IOSDevice('test').isSupportedForProject(flutterProject), true);
-  }, overrides: <Type, Generator>{
-    FileSystem: () => MemoryFileSystem(),
-    Platform: () => macPlatform,
-  });
-  testUsingContext('IOSDevice.isSupportedForProject is true with editable host app', () async {
-    fs.file('pubspec.yaml').createSync();
-    fs.file('.packages').createSync();
-    fs.directory('ios').createSync();
-    final FlutterProject flutterProject = FlutterProject.current();
-
-    expect(IOSDevice('test').isSupportedForProject(flutterProject), true);
-  }, overrides: <Type, Generator>{
-    FileSystem: () => MemoryFileSystem(),
-    Platform: () => macPlatform,
-  });
-
-  testUsingContext('IOSDevice.isSupportedForProject is false with no host app and no module', () async {
-    fs.file('pubspec.yaml').createSync();
-    fs.file('.packages').createSync();
-    final FlutterProject flutterProject = FlutterProject.current();
-
-    expect(IOSDevice('test').isSupportedForProject(flutterProject), false);
-  }, overrides: <Type, Generator>{
-    FileSystem: () => MemoryFileSystem(),
-    Platform: () => macPlatform,
   });
 }
+
+class MockIOSApp extends Mock implements IOSApp {}
+class MockArtifacts extends Mock implements Artifacts {}
+class MockCache extends Mock implements Cache {}
+class MockIMobileDevice extends Mock implements IMobileDevice {}
+class MockIOSDeploy extends Mock implements IOSDeploy {}
+class MockIOSWorkflow extends Mock implements IOSWorkflow {}
+class MockXcdevice extends Mock implements XCDevice {}

@@ -1,8 +1,6 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
-
-import 'dart:math';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
@@ -13,6 +11,7 @@ import 'debug.dart';
 import 'list_tile.dart';
 import 'material.dart';
 import 'material_localizations.dart';
+import 'theme.dart';
 
 /// The possible alignments of a [Drawer].
 enum DrawerAlignment {
@@ -56,6 +55,59 @@ const Duration _kBaseSettleDuration = Duration(milliseconds: 246);
 /// drawer children are often constructed with [ListTile]s, often concluding
 /// with an [AboutListTile].
 ///
+/// The [AppBar] automatically displays an appropriate [IconButton] to show the
+/// [Drawer] when a [Drawer] is available in the [Scaffold]. The [Scaffold]
+/// automatically handles the edge-swipe gesture to show the drawer.
+///
+/// {@animation 350 622 https://flutter.github.io/assets-for-api-docs/assets/material/drawer.mp4}
+///
+/// {@tool snippet}
+/// This example shows how to create a [Scaffold] that contains an [AppBar] and
+/// a [Drawer]. A user taps the "menu" icon in the [AppBar] to open the
+/// [Drawer]. The [Drawer] displays four items: A header and three menu items.
+/// The [Drawer] displays the four items using a [ListView], which allows the
+/// user to scroll through the items if need be.
+///
+/// ```dart
+/// Scaffold(
+///   appBar: AppBar(
+///     title: const Text('Drawer Demo'),
+///   ),
+///   drawer: Drawer(
+///     child: ListView(
+///       padding: EdgeInsets.zero,
+///       children: const <Widget>[
+///         DrawerHeader(
+///           decoration: BoxDecoration(
+///             color: Colors.blue,
+///           ),
+///           child: Text(
+///             'Drawer Header',
+///             style: TextStyle(
+///               color: Colors.white,
+///               fontSize: 24,
+///             ),
+///           ),
+///         ),
+///         ListTile(
+///           leading: Icon(Icons.message),
+///           title: Text('Messages'),
+///         ),
+///         ListTile(
+///           leading: Icon(Icons.account_circle),
+///           title: Text('Profile'),
+///         ),
+///         ListTile(
+///           leading: Icon(Icons.settings),
+///           title: Text('Settings'),
+///         ),
+///       ],
+///     ),
+///   ),
+/// )
+/// ```
+/// {@end-tool}
+///
 /// An open drawer can be closed by calling [Navigator.pop]. For example
 /// a drawer item might close the drawer when tapped:
 ///
@@ -69,10 +121,6 @@ const Duration _kBaseSettleDuration = Duration(milliseconds: 246);
 ///   },
 /// );
 /// ```
-///
-/// The [AppBar] automatically displays an appropriate [IconButton] to show the
-/// [Drawer] when a [Drawer] is available in the [Scaffold]. The [Scaffold]
-/// automatically handles the edge-swipe gesture to show the drawer.
 ///
 /// See also:
 ///
@@ -127,12 +175,15 @@ class Drawer extends StatelessWidget {
   Widget build(BuildContext context) {
     assert(debugCheckHasMaterialLocalizations(context));
     String label = semanticLabel;
-    switch (defaultTargetPlatform) {
+    switch (Theme.of(context).platform) {
       case TargetPlatform.iOS:
+      case TargetPlatform.macOS:
         label = semanticLabel;
         break;
       case TargetPlatform.android:
       case TargetPlatform.fuchsia:
+      case TargetPlatform.linux:
+      case TargetPlatform.windows:
         label = semanticLabel ?? MaterialLocalizations.of(context)?.drawerLabel;
     }
     return Semantics(
@@ -182,6 +233,8 @@ class DrawerController extends StatefulWidget {
     this.drawerCallback,
     this.dragStartBehavior = DragStartBehavior.start,
     this.scrimColor,
+    this.edgeDragWidth,
+    this.enableOpenDragGesture = true,
   }) : assert(child != null),
        assert(dragStartBehavior != null),
        assert(alignment != null),
@@ -227,6 +280,22 @@ class DrawerController extends StatefulWidget {
   ///
   /// By default, the color used is [Colors.black54]
   final Color scrimColor;
+
+  /// Determines if the [Drawer] can be opened with a drag gesture.
+  ///
+  /// By default, the drag gesture is enabled.
+  final bool enableOpenDragGesture;
+
+  /// The width of the area within which a horizontal swipe will open the
+  /// drawer.
+  ///
+  /// By default, the value used is 20.0 added to the padding edge of
+  /// `MediaQuery.of(context).padding` that corresponds to [alignment].
+  /// This ensures that the drag area for notched devices is not obscured. For
+  /// example, if [alignment] is set to [DrawerAlignment.start] and
+  /// `TextDirection.of(context)` is set to [TextDirection.ltr],
+  /// 20.0 will be added to `MediaQuery.of(context).padding.left`.
+  final double edgeDragWidth;
 
   @override
   DrawerControllerState createState() => DrawerControllerState();
@@ -320,7 +389,7 @@ class DrawerControllerState extends State<DrawerController> with SingleTickerPro
   final GlobalKey _drawerKey = GlobalKey();
 
   double get _width {
-    final RenderBox box = _drawerKey.currentContext?.findRenderObject();
+    final RenderBox box = _drawerKey.currentContext?.findRenderObject() as RenderBox;
     if (box != null)
       return box.size.width;
     return _kWidth; // drawer not being shown currently
@@ -365,12 +434,16 @@ class DrawerControllerState extends State<DrawerController> with SingleTickerPro
           break;
       }
       switch (Directionality.of(context)) {
-      case TextDirection.rtl:
-        _controller.fling(velocity: -visualVelocity);
-        break;
-      case TextDirection.ltr:
-        _controller.fling(velocity: visualVelocity);
-        break;
+        case TextDirection.rtl:
+          _controller.fling(velocity: -visualVelocity);
+          if (widget.drawerCallback != null)
+            widget.drawerCallback(visualVelocity < 0.0);
+          break;
+        case TextDirection.ltr:
+          _controller.fling(velocity: visualVelocity);
+          if (widget.drawerCallback != null)
+            widget.drawerCallback(visualVelocity > 0.0);
+          break;
       }
     } else if (_controller.value < 0.5) {
       close();
@@ -427,26 +500,54 @@ class DrawerControllerState extends State<DrawerController> with SingleTickerPro
   Widget _buildDrawer(BuildContext context) {
     final bool drawerIsStart = widget.alignment == DrawerAlignment.start;
     final EdgeInsets padding = MediaQuery.of(context).padding;
-    double dragAreaWidth = drawerIsStart ? padding.left : padding.right;
+    final TextDirection textDirection = Directionality.of(context);
 
-    if (Directionality.of(context) == TextDirection.rtl)
-      dragAreaWidth = drawerIsStart ? padding.right : padding.left;
+    double dragAreaWidth = widget.edgeDragWidth;
+    if (widget.edgeDragWidth == null) {
+      switch (textDirection) {
+        case TextDirection.ltr:
+          dragAreaWidth = _kEdgeDragWidth +
+            (drawerIsStart ? padding.left : padding.right);
+          break;
+        case TextDirection.rtl:
+          dragAreaWidth = _kEdgeDragWidth +
+            (drawerIsStart ? padding.right : padding.left);
+          break;
+      }
+    }
 
-    dragAreaWidth = max(dragAreaWidth, _kEdgeDragWidth);
     if (_controller.status == AnimationStatus.dismissed) {
-      return Align(
-        alignment: _drawerOuterAlignment,
-        child: GestureDetector(
-          key: _gestureDetectorKey,
-          onHorizontalDragUpdate: _move,
-          onHorizontalDragEnd: _settle,
-          behavior: HitTestBehavior.translucent,
-          excludeFromSemantics: true,
-          dragStartBehavior: widget.dragStartBehavior,
-          child: Container(width: dragAreaWidth),
-        ),
-      );
+      if (widget.enableOpenDragGesture) {
+        return Align(
+          alignment: _drawerOuterAlignment,
+          child: GestureDetector(
+            key: _gestureDetectorKey,
+            onHorizontalDragUpdate: _move,
+            onHorizontalDragEnd: _settle,
+            behavior: HitTestBehavior.translucent,
+            excludeFromSemantics: true,
+            dragStartBehavior: widget.dragStartBehavior,
+            child: Container(width: dragAreaWidth),
+          ),
+        );
+      } else {
+        return const SizedBox.shrink();
+      }
     } else {
+      bool platformHasBackButton;
+      switch (Theme.of(context).platform) {
+        case TargetPlatform.android:
+          platformHasBackButton = true;
+          break;
+        case TargetPlatform.iOS:
+        case TargetPlatform.macOS:
+        case TargetPlatform.fuchsia:
+        case TargetPlatform.linux:
+        case TargetPlatform.windows:
+          platformHasBackButton = false;
+          break;
+      }
+      assert(platformHasBackButton != null);
       return GestureDetector(
         key: _gestureDetectorKey,
         onHorizontalDragDown: _handleDragDown,
@@ -459,14 +560,19 @@ class DrawerControllerState extends State<DrawerController> with SingleTickerPro
           child: Stack(
             children: <Widget>[
               BlockSemantics(
-                child: GestureDetector(
+                child: ExcludeSemantics(
                   // On Android, the back button is used to dismiss a modal.
-                  excludeFromSemantics: defaultTargetPlatform == TargetPlatform.android,
-                  onTap: close,
-                  child: Semantics(
-                    label: MaterialLocalizations.of(context)?.modalBarrierDismissLabel,
-                    child: Container( // The drawer's "scrim"
-                      color: _scrimColorTween.evaluate(_controller),
+                  excluding: platformHasBackButton,
+                  child: GestureDetector(
+                    onTap: close,
+                    child: Semantics(
+                      label: MaterialLocalizations.of(context)?.modalBarrierDismissLabel,
+                      child: MouseRegion(
+                        opaque: true,
+                        child: Container( // The drawer's "scrim"
+                          color: _scrimColorTween.evaluate(_controller),
+                        ),
+                      ),
                     ),
                   ),
                 ),

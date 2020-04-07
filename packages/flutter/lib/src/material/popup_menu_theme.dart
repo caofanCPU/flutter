@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -29,7 +29,8 @@ import 'theme.dart';
 ///
 ///  * [ThemeData], which describes the overall theme information for the
 ///    application.
-class PopupMenuThemeData extends Diagnosticable {
+@immutable
+class PopupMenuThemeData with Diagnosticable {
   /// Creates the set of properties used to configure [PopupMenuTheme].
   const PopupMenuThemeData({
     this.color,
@@ -99,11 +100,11 @@ class PopupMenuThemeData extends Diagnosticable {
       return true;
     if (other.runtimeType != runtimeType)
       return false;
-    final PopupMenuThemeData typedOther = other;
-    return typedOther.elevation == elevation
-        && typedOther.color == color
-        && typedOther.shape == shape
-        && typedOther.textStyle == textStyle;
+    return other is PopupMenuThemeData
+        && other.elevation == elevation
+        && other.color == color
+        && other.shape == shape
+        && other.textStyle == textStyle;
   }
 
   @override
@@ -121,23 +122,16 @@ class PopupMenuThemeData extends Diagnosticable {
 ///
 /// Values specified here are used for popup menu properties that are not
 /// given an explicit non-null value.
-class PopupMenuTheme extends InheritedWidget {
+class PopupMenuTheme extends InheritedTheme {
   /// Creates a popup menu theme that controls the configurations for
   /// popup menus in its widget subtree.
-  PopupMenuTheme({
+  ///
+  /// The data argument must not be null.
+  const PopupMenuTheme({
     Key key,
-    Color color,
-    ShapeBorder shape,
-    double elevation,
-    TextStyle textStyle,
+    @required this.data,
     Widget child,
-  }) : data = PopupMenuThemeData(
-         color: color,
-         shape: shape,
-         elevation: elevation,
-         textStyle: textStyle,
-       ),
-       super(key: key, child: child);
+  }) : assert(data != null), super(key: key, child: child);
 
   /// The properties for descendant popup menu widgets.
   final PopupMenuThemeData data;
@@ -152,8 +146,14 @@ class PopupMenuTheme extends InheritedWidget {
   /// PopupMenuThemeData theme = PopupMenuTheme.of(context);
   /// ```
   static PopupMenuThemeData of(BuildContext context) {
-    final PopupMenuTheme popupMenuTheme = context.inheritFromWidgetOfExactType(PopupMenuTheme);
+    final PopupMenuTheme popupMenuTheme = context.dependOnInheritedWidgetOfExactType<PopupMenuTheme>();
     return popupMenuTheme?.data ?? Theme.of(context).popupMenuTheme;
+  }
+
+  @override
+  Widget wrap(BuildContext context, Widget child) {
+    final PopupMenuTheme ancestorTheme = context.findAncestorWidgetOfExactType<PopupMenuTheme>();
+    return identical(this, ancestorTheme) ? child : PopupMenuTheme(data: data, child: child);
   }
 
   @override

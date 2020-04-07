@@ -1,18 +1,18 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
-import 'package:flutter/rendering.dart';
-import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter/services.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
+import 'package:flutter_test/flutter_test.dart';
 
 import '../rendering/mock_canvas.dart';
 import '../rendering/recording_canvas.dart';
 import 'rendering_tester.dart';
 
-class FakeEditableTextState extends TextSelectionDelegate {
+class FakeEditableTextState with TextSelectionDelegate {
   @override
   TextEditingValue get textEditingValue { return const TextEditingValue(); }
 
@@ -179,6 +179,30 @@ void main() {
     expect(editable, paintsExactlyCountTimes(#drawRRect, 0));
   }, skip: isBrowser);
 
+  test('Can change textAlign', () {
+    final TextSelectionDelegate delegate = FakeEditableTextState();
+
+    final RenderEditable editable = RenderEditable(
+      textAlign: TextAlign.start,
+      textDirection: TextDirection.ltr,
+      offset: ViewportOffset.zero(),
+      textSelectionDelegate: delegate,
+      text: const TextSpan(text: 'test'),
+      startHandleLayerLink: LayerLink(),
+      endHandleLayerLink: LayerLink(),
+    );
+
+    layout(editable);
+
+    editable.layout(BoxConstraints.loose(const Size(100, 100)));
+    expect(editable.textAlign, TextAlign.start);
+    expect(editable.debugNeedsLayout, isFalse);
+
+    editable.textAlign = TextAlign.center;
+    expect(editable.textAlign, TextAlign.center);
+    expect(editable.debugNeedsLayout, isTrue);
+  });
+
   test('Cursor with ideographic script', () {
     final TextSelectionDelegate delegate = FakeEditableTextState();
     final ValueNotifier<bool> showCursor = ValueNotifier<bool>(true);
@@ -343,6 +367,58 @@ void main() {
     );
     expect(editable, paintsExactlyCountTimes(#drawRect, 1));
   }, skip: isBrowser);
+
+  test('ignore key event from web platform', () async {
+    final TextSelectionDelegate delegate = FakeEditableTextState();
+    final ViewportOffset viewportOffset = ViewportOffset.zero();
+    TextSelection currentSelection;
+    final RenderEditable editable = RenderEditable(
+      backgroundCursorColor: Colors.grey,
+      selectionColor: Colors.black,
+      textDirection: TextDirection.ltr,
+      cursorColor: Colors.red,
+      offset: viewportOffset,
+      // This makes the scroll axis vertical.
+      maxLines: 2,
+      textSelectionDelegate: delegate,
+      onSelectionChanged: (TextSelection selection, RenderEditable renderObject, SelectionChangedCause cause) {
+        currentSelection = selection;
+      },
+      startHandleLayerLink: LayerLink(),
+      endHandleLayerLink: LayerLink(),
+      text: const TextSpan(
+        text: 'test\ntest',
+        style: TextStyle(
+          height: 1.0, fontSize: 10.0, fontFamily: 'Ahem',
+        ),
+      ),
+      selection: const TextSelection.collapsed(
+        offset: 4,
+      ),
+    );
+
+    layout(editable);
+    editable.hasFocus = true;
+
+    expect(
+      editable,
+      paints..paragraph(offset: Offset.zero),
+    );
+
+    editable.selectPositionAt(from: const Offset(0, 0), cause: SelectionChangedCause.tap);
+    editable.selection = const TextSelection.collapsed(offset: 0);
+    pumpFrame();
+
+    if(kIsWeb) {
+      await simulateKeyDownEvent(LogicalKeyboardKey.arrowRight, platform: 'web');
+      expect(currentSelection.isCollapsed, true);
+      expect(currentSelection.baseOffset, 0);
+    } else {
+      await simulateKeyDownEvent(LogicalKeyboardKey.arrowRight, platform: 'android');
+      expect(currentSelection.isCollapsed, true);
+      expect(currentSelection.baseOffset, 1);
+    }
+  });
 
   test('selects correct place with offsets', () {
     final TextSelectionDelegate delegate = FakeEditableTextState();
@@ -544,4 +620,47 @@ void main() {
     editable.hasFocus = false;
     expect(editable.hasFocus, false);
   });
+
+  test('has correct maxScrollExtent', () {
+    final TextSelectionDelegate delegate = FakeEditableTextState();
+    EditableText.debugDeterministicCursor = true;
+
+    final RenderEditable editable = RenderEditable(
+      maxLines: 2,
+      backgroundCursorColor: Colors.grey,
+      textDirection: TextDirection.ltr,
+      cursorColor: const Color.fromARGB(0xFF, 0xFF, 0x00, 0x00),
+      offset: ViewportOffset.zero(),
+      textSelectionDelegate: delegate,
+      text: const TextSpan(
+        text: '撒地方加咖啡哈金凤凰卡号方式剪坏算法发挥福建垃\nasfjafjajfjaslfjaskjflasjfksajf撒分开建安路口附近拉设\n计费可使肌肤撒附近埃里克圾房卡设计费"',
+        style: TextStyle(
+          height: 1.0, fontSize: 10.0, fontFamily: 'Roboto',
+        ),
+      ),
+      startHandleLayerLink: LayerLink(),
+      endHandleLayerLink: LayerLink(),
+      selection: const TextSelection.collapsed(
+        offset: 4,
+        affinity: TextAffinity.upstream,
+      ),
+    );
+
+    editable.layout(BoxConstraints.loose(const Size(100.0, 1000.0)));
+    expect(editable.size, equals(const Size(100, 20)));
+    expect(editable.maxLines, equals(2));
+    expect(editable.maxScrollExtent, equals(90));
+
+    editable.layout(BoxConstraints.loose(const Size(150.0, 1000.0)));
+    expect(editable.maxScrollExtent, equals(50));
+
+    editable.layout(BoxConstraints.loose(const Size(200.0, 1000.0)));
+    expect(editable.maxScrollExtent, equals(40));
+
+    editable.layout(BoxConstraints.loose(const Size(500.0, 1000.0)));
+    expect(editable.maxScrollExtent, equals(10));
+
+    editable.layout(BoxConstraints.loose(const Size(1000.0, 1000.0)));
+    expect(editable.maxScrollExtent, equals(10));
+  }, skip: isBrowser); // TODO(yjbanov): https://github.com/flutter/flutter/issues/42772
 }

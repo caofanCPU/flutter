@@ -1,4 +1,4 @@
-// Copyright 2015 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -6,6 +6,21 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/material.dart';
 
 void main() {
+  // Pumps and ensures that the BottomSheet animates non-linearly.
+  Future<void> _checkNonLinearAnimation(WidgetTester tester) async {
+    final Offset firstPosition = tester.getCenter(find.text('One'));
+    await tester.pump(const Duration(milliseconds: 30));
+    final Offset secondPosition = tester.getCenter(find.text('One'));
+    await tester.pump(const Duration(milliseconds: 30));
+    final Offset thirdPosition = tester.getCenter(find.text('One'));
+
+    final double dyDelta1 = secondPosition.dy - firstPosition.dy;
+    final double dyDelta2 = thirdPosition.dy - secondPosition.dy;
+
+    // If the animation were linear, these two values would be the same.
+    expect(dyDelta1, isNot(closeTo(dyDelta2, 0.1)));
+  }
+
   testWidgets('Verify that a BottomSheet can be rebuilt with ScaffoldFeatureController.setState()', (WidgetTester tester) async {
     final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
     PersistentBottomSheetController<void> bottomSheet;
@@ -52,7 +67,7 @@ void main() {
             );
           },
         ),
-      )
+      ),
     ));
 
     await tester.pumpAndSettle();
@@ -97,14 +112,49 @@ void main() {
     expect(find.text('Two'), findsNothing);
   });
 
+  testWidgets('Verify that a BottomSheet animates non-linearly', (WidgetTester tester) async {
+    final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
+
+    await tester.pumpWidget(MaterialApp(
+      home: Scaffold(
+        key: scaffoldKey,
+        body: const Center(child: Text('body')),
+      ),
+    ));
+
+    scaffoldKey.currentState.showBottomSheet<void>((BuildContext context) {
+      return ListView(
+        shrinkWrap: true,
+        primary: false,
+        children: <Widget>[
+          Container(height: 100.0, child: const Text('One')),
+          Container(height: 100.0, child: const Text('Two')),
+          Container(height: 100.0, child: const Text('Three')),
+        ],
+      );
+    });
+    await tester.pump();
+    await _checkNonLinearAnimation(tester);
+
+    await tester.pumpAndSettle();
+
+    expect(find.text('Two'), findsOneWidget);
+
+    await tester.drag(find.text('Two'), const Offset(0.0, 200.0));
+    await _checkNonLinearAnimation(tester);
+    await tester.pumpAndSettle();
+
+    expect(find.text('Two'), findsNothing);
+  });
+
   testWidgets('Verify that a scrollControlled BottomSheet can be dismissed', (WidgetTester tester) async {
     final GlobalKey<ScaffoldState> scaffoldKey = GlobalKey<ScaffoldState>();
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         key: scaffoldKey,
-        body: const Center(child: Text('body'))
-      )
+        body: const Center(child: Text('body')),
+      ),
     ));
 
     scaffoldKey.currentState.showBottomSheet<void>(
@@ -258,7 +308,7 @@ void main() {
           onPressed: null,
           child: Text('fab'),
         ),
-      )
+      ),
     ));
 
     scaffoldKey.currentState.showBottomSheet<void>(
@@ -431,6 +481,7 @@ void main() {
     const Color color = Colors.pink;
     const double elevation = 9.0;
     final ShapeBorder shape = BeveledRectangleBorder(borderRadius: BorderRadius.circular(12));
+    const Clip clipBehavior = Clip.antiAlias;
 
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
@@ -449,7 +500,7 @@ void main() {
           Container(height: 100.0, child: const Text('Three')),
         ],
       );
-    }, backgroundColor: color, elevation: elevation, shape: shape);
+    }, backgroundColor: color, elevation: elevation, shape: shape, clipBehavior: clipBehavior);
 
     await tester.pumpAndSettle();
 
@@ -457,6 +508,7 @@ void main() {
     expect(bottomSheet.backgroundColor, color);
     expect(bottomSheet.elevation, elevation);
     expect(bottomSheet.shape, shape);
+    expect(bottomSheet.clipBehavior, clipBehavior);
   });
 
   testWidgets('PersistentBottomSheetController.close dismisses the bottom sheet', (WidgetTester tester) async {
@@ -464,8 +516,8 @@ void main() {
     await tester.pumpWidget(MaterialApp(
       home: Scaffold(
         key: scaffoldKey,
-        body: const Center(child: Text('body'))
-      )
+        body: const Center(child: Text('body')),
+      ),
     ));
 
     final PersistentBottomSheetController<void> bottomSheet = scaffoldKey.currentState.showBottomSheet<void>((_) {

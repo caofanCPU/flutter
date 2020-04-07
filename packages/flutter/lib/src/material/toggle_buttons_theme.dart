@@ -1,4 +1,4 @@
-// Copyright 2019 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
@@ -24,10 +24,13 @@ import 'theme.dart';
 ///
 ///  * [ToggleButtonsTheme], which describes the actual configuration of a
 ///    toggle buttons theme.
-class ToggleButtonsThemeData extends Diagnosticable {
+@immutable
+class ToggleButtonsThemeData with Diagnosticable {
   /// Creates the set of color and border properties used to configure
   /// [ToggleButtons].
   const ToggleButtonsThemeData({
+    this.textStyle,
+    this.constraints,
     this.color,
     this.selectedColor,
     this.disabledColor,
@@ -42,6 +45,18 @@ class ToggleButtonsThemeData extends Diagnosticable {
     this.borderRadius,
     this.borderWidth,
   });
+
+  /// The default text style for [ToggleButtons.children].
+  ///
+  /// [TextStyle.color] will be ignored and substituted by [color],
+  /// [selectedColor] or [disabledColor] depending on whether the buttons
+  /// are active, selected, or disabled.
+  final TextStyle textStyle;
+
+  /// Defines the button's size.
+  ///
+  /// Typically used to constrain the button's minimum size.
+  final BoxConstraints constraints;
 
   /// The color for descendant [Text] and [Icon] widgets if the toggle button
   /// is enabled.
@@ -95,6 +110,8 @@ class ToggleButtonsThemeData extends Diagnosticable {
   /// Creates a copy of this object but with the given fields replaced with the
   /// new values.
   ToggleButtonsThemeData copyWith({
+    TextStyle textStyle,
+    BoxConstraints constraints,
     Color color,
     Color selectedColor,
     Color disabledColor,
@@ -110,6 +127,8 @@ class ToggleButtonsThemeData extends Diagnosticable {
     double borderWidth,
   }) {
     return ToggleButtonsThemeData(
+      textStyle: textStyle ?? this.textStyle,
+      constraints: constraints ?? this.constraints,
       color: color ?? this.color,
       selectedColor: selectedColor ?? this.selectedColor,
       disabledColor: disabledColor ?? this.disabledColor,
@@ -132,6 +151,8 @@ class ToggleButtonsThemeData extends Diagnosticable {
     if (a == null && b == null)
       return null;
     return ToggleButtonsThemeData(
+      textStyle: TextStyle.lerp(a?.textStyle, b?.textStyle, t),
+      constraints: BoxConstraints.lerp(a?.constraints, b?.constraints, t),
       color: Color.lerp(a?.color, b?.color, t),
       selectedColor: Color.lerp(a?.selectedColor, b?.selectedColor, t),
       disabledColor: Color.lerp(a?.disabledColor, b?.disabledColor, t),
@@ -151,6 +172,8 @@ class ToggleButtonsThemeData extends Diagnosticable {
   @override
   int get hashCode {
     return hashValues(
+      textStyle,
+      constraints,
       color,
       selectedColor,
       disabledColor,
@@ -173,25 +196,29 @@ class ToggleButtonsThemeData extends Diagnosticable {
       return true;
     if (other.runtimeType != runtimeType)
       return false;
-    final ToggleButtonsThemeData typedOther = other;
-    return typedOther.color == color
-        && typedOther.selectedColor == selectedColor
-        && typedOther.disabledColor == disabledColor
-        && typedOther.fillColor == fillColor
-        && typedOther.focusColor == focusColor
-        && typedOther.highlightColor == highlightColor
-        && typedOther.hoverColor == hoverColor
-        && typedOther.splashColor == splashColor
-        && typedOther.borderColor == borderColor
-        && typedOther.selectedBorderColor == selectedBorderColor
-        && typedOther.disabledBorderColor == disabledBorderColor
-        && typedOther.borderRadius == borderRadius
-        && typedOther.borderWidth == borderWidth;
+    return other is ToggleButtonsThemeData
+        && other.textStyle == textStyle
+        && other.constraints == constraints
+        && other.color == color
+        && other.selectedColor == selectedColor
+        && other.disabledColor == disabledColor
+        && other.fillColor == fillColor
+        && other.focusColor == focusColor
+        && other.highlightColor == highlightColor
+        && other.hoverColor == hoverColor
+        && other.splashColor == splashColor
+        && other.borderColor == borderColor
+        && other.selectedBorderColor == selectedBorderColor
+        && other.disabledBorderColor == disabledBorderColor
+        && other.borderRadius == borderRadius
+        && other.borderWidth == borderWidth;
   }
 
   @override
   void debugFillProperties(DiagnosticPropertiesBuilder properties) {
     super.debugFillProperties(properties);
+    textStyle?.debugFillProperties(properties, prefix: 'textStyle.');
+    properties.add(DiagnosticsProperty<BoxConstraints>('constraints', constraints, defaultValue: null));
     properties.add(ColorProperty('color', color, defaultValue: null));
     properties.add(ColorProperty('selectedColor', selectedColor, defaultValue: null));
     properties.add(ColorProperty('disabledColor', disabledColor, defaultValue: null));
@@ -213,41 +240,16 @@ class ToggleButtonsThemeData extends Diagnosticable {
 ///
 /// Values specified here are used for [ToggleButtons] properties that are not
 /// given an explicit non-null value.
-class ToggleButtonsTheme extends InheritedWidget {
+class ToggleButtonsTheme extends InheritedTheme {
   /// Creates a toggle buttons theme that controls the color and border
   /// parameters for [ToggleButtons].
-  ToggleButtonsTheme({
+  ///
+  /// The data argument must not be null.
+  const ToggleButtonsTheme({
     Key key,
-    Color color,
-    Color selectedColor,
-    Color disabledColor,
-    Color fillColor,
-    Color focusColor,
-    Color highlightColor,
-    Color hoverColor,
-    Color splashColor,
-    Color borderColor,
-    Color selectedBorderColor,
-    Color disabledBorderColor,
-    BorderRadius borderRadius,
-    double borderWidth,
+    @required this.data,
     Widget child,
-  }) :  data = ToggleButtonsThemeData(
-          color: color,
-          selectedColor: selectedColor,
-          disabledColor: disabledColor,
-          fillColor: fillColor,
-          focusColor: focusColor,
-          highlightColor: highlightColor,
-          hoverColor: hoverColor,
-          splashColor: splashColor,
-          borderColor: borderColor,
-          selectedBorderColor: selectedBorderColor,
-          disabledBorderColor: disabledBorderColor,
-          borderRadius: borderRadius,
-          borderWidth: borderWidth,
-        ),
-        super(key: key, child: child);
+  }) : assert(data != null), super(key: key, child: child);
 
   /// Specifies the color and border values for descendant [ToggleButtons] widgets.
   final ToggleButtonsThemeData data;
@@ -263,8 +265,14 @@ class ToggleButtonsTheme extends InheritedWidget {
   /// ToggleButtonsTheme theme = ToggleButtonsTheme.of(context);
   /// ```
   static ToggleButtonsThemeData of(BuildContext context) {
-    final ToggleButtonsTheme toggleButtonsTheme = context.inheritFromWidgetOfExactType(ToggleButtonsTheme);
+    final ToggleButtonsTheme toggleButtonsTheme = context.dependOnInheritedWidgetOfExactType<ToggleButtonsTheme>();
     return toggleButtonsTheme?.data ?? Theme.of(context).toggleButtonsTheme;
+  }
+
+  @override
+  Widget wrap(BuildContext context, Widget child) {
+    final ToggleButtonsTheme ancestorTheme = context.findAncestorWidgetOfExactType<ToggleButtonsTheme>();
+    return identical(this, ancestorTheme) ? child : ToggleButtonsTheme(data: data, child: child);
   }
 
   @override

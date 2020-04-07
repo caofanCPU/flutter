@@ -1,9 +1,10 @@
-// Copyright 2017 The Chromium Authors. All rights reserved.
+// Copyright 2014 The Flutter Authors. All rights reserved.
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
 import 'dart:ui' as ui;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/painting.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -660,7 +661,7 @@ void main() {
         WidgetSpan(child: SizedBox(width: 50, height: 30)),
         WidgetSpan(child: SizedBox(width: 50, height: 30)),
         WidgetSpan(child: SizedBox(width: 50, height: 30)),
-      ]
+      ],
     );
 
     // We provide dimensions for the widgets
@@ -729,4 +730,107 @@ void main() {
     expect(painter.inlinePlaceholderBoxes[12], const TextBox.fromLTRBD(300, 30, 351, 60, TextDirection.ltr));
     expect(painter.inlinePlaceholderBoxes[13], const TextBox.fromLTRBD(351, 30, 401, 60, TextDirection.ltr));
   }, skip: isBrowser);
+
+  // Null values are valid. See https://github.com/flutter/flutter/pull/48346#issuecomment-584839221
+  test('TextPainter set TextHeightBehavior null test', () {
+    final TextPainter painter = TextPainter(textHeightBehavior: null)
+      ..textDirection = TextDirection.ltr;
+
+    painter.textHeightBehavior = const TextHeightBehavior();
+    painter.textHeightBehavior = null;
+  });
+
+  test('TextPainter line metrics', () {
+    final TextPainter painter = TextPainter()
+      ..textDirection = TextDirection.ltr;
+
+    const String text = 'test1\nhello line two really long for soft break\nfinal line 4';
+    painter.text = const TextSpan(
+      text: text,
+    );
+
+    painter.layout(maxWidth: 300);
+
+    expect(painter.text, const TextSpan(text: text));
+    expect(painter.preferredLineHeight, 14);
+
+    final List<ui.LineMetrics> lines = painter.computeLineMetrics();
+
+    expect(lines.length, 4);
+
+    // TODO(garyq): This data dump is for debugging a test flake. This should
+    // be removed when it is no longer useful.
+    if (lines[1].hardBreak == true) {
+      print('LineMetrics called: ${lines.length}');
+      for (final ui.LineMetrics line in lines) {
+        print('${line.lineNumber}: ${line.hardBreak}');
+      }
+    }
+
+    expect(lines[0].hardBreak, true);
+    expect(lines[1].hardBreak, false);
+    expect(lines[2].hardBreak, true);
+    expect(lines[3].hardBreak, true);
+
+    expect(lines[0].ascent, 11.199999809265137);
+    expect(lines[1].ascent, 11.199999809265137);
+    expect(lines[2].ascent, 11.199999809265137);
+    expect(lines[3].ascent, 11.199999809265137);
+
+    expect(lines[0].descent, 2.799999952316284);
+    expect(lines[1].descent, 2.799999952316284);
+    expect(lines[2].descent, 2.799999952316284);
+    expect(lines[3].descent, 2.799999952316284);
+
+    expect(lines[0].unscaledAscent, 11.199999809265137);
+    expect(lines[1].unscaledAscent, 11.199999809265137);
+    expect(lines[2].unscaledAscent, 11.199999809265137);
+    expect(lines[3].unscaledAscent, 11.199999809265137);
+
+    expect(lines[0].baseline, 11.200000047683716);
+    expect(lines[1].baseline, 25.200000047683716);
+    expect(lines[2].baseline, 39.200000047683716);
+    expect(lines[3].baseline, 53.200000047683716);
+
+    expect(lines[0].height, 14);
+    expect(lines[1].height, 14);
+    expect(lines[2].height, 14);
+    expect(lines[3].height, 14);
+
+    expect(lines[0].width, 70);
+    expect(lines[1].width, 294);
+    expect(lines[2].width, 266);
+    expect(lines[3].width, 168);
+
+    expect(lines[0].left, 0);
+    expect(lines[1].left, 0);
+    expect(lines[2].left, 0);
+    expect(lines[3].left, 0);
+
+    expect(lines[0].lineNumber, 0);
+    expect(lines[1].lineNumber, 1);
+    expect(lines[2].lineNumber, 2);
+    expect(lines[3].lineNumber, 3);
+
+  // Disable this test, this is causing a large amount of flaking and
+  // does not have a clear cause. This may or may not be a dart compiler
+  // issue or similar. See https://github.com/flutter/flutter/issues/43763
+  // for more info.
+  }, skip: true);
+
+  test('TextPainter caret height and line height', () {
+    final TextPainter painter = TextPainter()
+      ..textDirection = TextDirection.ltr
+      ..strutStyle = const StrutStyle(fontSize: 50.0);
+
+    const String text = 'A';
+    painter.text = const TextSpan(text: text, style: TextStyle(height: 1.0));
+    painter.layout();
+
+    final double caretHeight = painter.getFullHeightForCaret(
+      const ui.TextPosition(offset: 0),
+      ui.Rect.zero,
+    );
+    expect(caretHeight, 50.0);
+  }, skip: kIsWeb);
 }
