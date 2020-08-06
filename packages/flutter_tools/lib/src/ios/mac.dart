@@ -24,7 +24,9 @@ import '../macos/xcode.dart';
 import '../project.dart';
 import '../reporting/reporting.dart';
 import 'code_signing.dart';
+import 'devices.dart';
 import 'migrations/ios_migrator.dart';
+import 'migrations/project_base_configuration_migration.dart';
 import 'migrations/remove_framework_link_and_embedding_migration.dart';
 import 'migrations/xcode_build_system_migration.dart';
 import 'xcodeproj.dart';
@@ -65,11 +67,19 @@ class IMobileDevice {
   }
 
   /// Captures a screenshot to the specified outputFile.
-  Future<void> takeScreenshot(File outputFile) {
+  Future<void> takeScreenshot(
+    File outputFile,
+    String deviceID,
+    IOSDeviceInterface interfaceType,
+  ) {
     return _processUtils.run(
       <String>[
         _idevicescreenshotPath,
         outputFile.path,
+        '--udid',
+        deviceID,
+        if (interfaceType == IOSDeviceInterface.network)
+          '--network',
       ],
       throwOnError: true,
       environment: Map<String, String>.fromEntries(
@@ -86,6 +96,7 @@ Future<XcodeBuildResult> buildXcodeProject({
   bool buildForDevice,
   DarwinArch activeArch,
   bool codesign = true,
+  String deviceID,
 }) async {
   if (!upgradePbxProjWithFlutterAssets(app.project, globals.logger)) {
     return XcodeBuildResult(success: false);
@@ -94,6 +105,7 @@ Future<XcodeBuildResult> buildXcodeProject({
   final List<IOSMigrator> migrators = <IOSMigrator>[
     RemoveFrameworkLinkAndEmbeddingMigration(app.project, globals.logger, globals.xcode, globals.flutterUsage),
     XcodeBuildSystemMigration(app.project, globals.logger),
+    ProjectBaseConfigurationMigration(app.project, globals.logger),
   ];
 
   final IOSMigration migration = IOSMigration(migrators);
@@ -105,24 +117,12 @@ Future<XcodeBuildResult> buildXcodeProject({
     return XcodeBuildResult(success: false);
   }
 
-  final XcodeProjectInfo projectInfo = await globals.xcodeProjectInterpreter.getInfo(app.project.hostAppRoot.path);
-  if (!projectInfo.targets.contains('Runner')) {
-    globals.printError('The Xcode project does not define target "Runner" which is needed by Flutter tooling.');
-    globals.printError('Open Xcode to fix the problem:');
-    globals.printError('  open ios/Runner.xcworkspace');
-    return XcodeBuildResult(success: false);
-  }
+  await removeFinderExtendedAttributes(app.project.hostAppRoot, processUtils, globals.logger);
+
+  final XcodeProjectInfo projectInfo = await app.project.projectInfo();
   final String scheme = projectInfo.schemeFor(buildInfo);
   if (scheme == null) {
-    globals.printError('');
-    if (projectInfo.definesCustomSchemes) {
-      globals.printError('The Xcode project defines schemes: ${projectInfo.schemes.join(', ')}');
-      globals.printError('You must specify a --flavor option to select one of them.');
-    } else {
-      globals.printError('The Xcode project does not define custom schemes.');
-      globals.printError('You cannot use the --flavor option.');
-    }
-    return XcodeBuildResult(success: false);
+    projectInfo.reportFlavorNotFoundAndExit();
   }
   final String configuration = projectInfo.buildConfigurationFor(buildInfo, scheme);
   if (configuration == null) {
@@ -175,7 +175,8 @@ Future<XcodeBuildResult> buildXcodeProject({
     autoSigningConfigs = await getCodeSigningIdentityDevelopmentTeam(
       iosApp: app,
       processManager: globals.processManager,
-      logger: globals.logger
+      logger: globals.logger,
+      buildInfo: buildInfo,
     );
   }
 
@@ -223,17 +224,42 @@ Future<XcodeBuildResult> buildXcodeProject({
     }
   }
 
-  if (buildForDevice) {
-    buildCommands.addAll(<String>['-sdk', 'iphoneos']);
+  // Check if the project contains a watchOS companion app.
+  final bool hasWatchCompanion = await app.project.containsWatchCompanion(
+    projectInfo.targets,
+    buildInfo,
+  );
+  if (hasWatchCompanion) {
+    // The -sdk argument has to be omitted if a watchOS companion app exists.
+    // Otherwise the build will fail as WatchKit dependencies cannot be build using the iOS SDK.
+    globals.printStatus('Watch companion app found. Adjusting build settings.');
+    if (!buildForDevice && (deviceID == null || deviceID == '')) {
+      globals.printError('No simulator device ID has been set.');
+      globals.printError('A device ID is required to build an app with a watchOS companion app.');
+      globals.printError('Please run "flutter devices" to get a list of available device IDs');
+      globals.printError('and specify one using the -d, --device-id flag.');
+      return XcodeBuildResult(success: false);
+    }
+    if (!buildForDevice) {
+      buildCommands.addAll(<String>['-destination', 'id=$deviceID']);
+    }
   } else {
-    buildCommands.addAll(<String>['-sdk', 'iphonesimulator', '-arch', 'x86_64']);
+    if (buildForDevice) {
+      buildCommands.addAll(<String>['-sdk', 'iphoneos']);
+    } else {
+      buildCommands.addAll(<String>['-sdk', 'iphonesimulator', '-arch', 'x86_64']);
+    }
   }
 
   if (activeArch != null) {
     final String activeArchName = getNameForDarwinArch(activeArch);
     if (activeArchName != null) {
       buildCommands.add('ONLY_ACTIVE_ARCH=YES');
-      buildCommands.add('ARCHS=$activeArchName');
+      // Setting ARCHS to $activeArchName will break the build if a watchOS companion app exists,
+      // as it cannot be build for the architecture of the flutter app.
+      if (!hasWatchCompanion) {
+        buildCommands.add('ARCHS=$activeArchName');
+      }
     }
   }
 
@@ -294,7 +320,7 @@ Future<XcodeBuildResult> buildXcodeProject({
   buildCommands.addAll(environmentVariablesAsXcodeBuildSettings(globals.platform));
 
   final Stopwatch sw = Stopwatch()..start();
-  initialBuildStatus = globals.logger.startProgress('Running Xcode build...', timeout: timeoutConfiguration.fastOperation);
+  initialBuildStatus = globals.logger.startProgress('Running Xcode build...', timeout: timeoutConfiguration.slowOperation);
 
   final RunResult buildResult = await _runBuildWithRetries(buildCommands, app);
 
@@ -315,7 +341,7 @@ Future<XcodeBuildResult> buildXcodeProject({
   // it a lot of wiggle room (locally on Flutter Gallery, this takes ~1s).
   // When there is a timeout, we retry once. See issue #35988.
   final List<String> showBuildSettingsCommand = (List<String>
-      .from(buildCommands)
+      .of(buildCommands)
       ..add('-showBuildSettings'))
       // Undocumented behavior: xcodebuild craps out if -showBuildSettings
       // is used together with -allowProvisioningUpdates or
@@ -370,8 +396,17 @@ Future<XcodeBuildResult> buildXcodeProject({
       ),
     );
   } else {
+    // If the app contains a watch companion target, the sdk argument of xcodebuild has to be omitted.
+    // For some reason this leads to TARGET_BUILD_DIR always ending in 'iphoneos' even though the
+    // actual directory will end with 'iphonesimulator' for simulator builds.
+    // The value of TARGET_BUILD_DIR is adjusted to accommodate for this effect.
+    String targetBuildDir = buildSettings['TARGET_BUILD_DIR'];
+    if (hasWatchCompanion && !buildForDevice) {
+      globals.printTrace('Replacing iphoneos with iphonesimulator in TARGET_BUILD_DIR.');
+      targetBuildDir = targetBuildDir.replaceFirst('iphoneos', 'iphonesimulator');
+    }
     final String expectedOutputDirectory = globals.fs.path.join(
-      buildSettings['TARGET_BUILD_DIR'],
+      targetBuildDir,
       buildSettings['WRAPPER_NAME'],
     );
 
@@ -402,6 +437,25 @@ Future<XcodeBuildResult> buildXcodeProject({
           buildSettings: buildSettings,
       ),
     );
+  }
+}
+
+/// Extended attributes applied by Finder can cause code signing errors. Remove them.
+/// https://developer.apple.com/library/archive/qa/qa1940/_index.html
+@visibleForTesting
+Future<void> removeFinderExtendedAttributes(Directory iosProjectDirectory, ProcessUtils processUtils, Logger logger) async {
+  final bool success = await processUtils.exitsHappy(
+    <String>[
+      'xattr',
+      '-r',
+      '-d',
+      'com.apple.FinderInfo',
+      iosProjectDirectory.path,
+    ]
+  );
+  // Ignore all errors, for example if directory is missing.
+  if (!success) {
+    logger.printTrace('Failed to remove xattr com.apple.FinderInfo from ${iosProjectDirectory.path}');
   }
 }
 
@@ -546,7 +600,7 @@ class XcodeBuildExecution {
   final Map<String, String> buildSettings;
 }
 
-const String _xcodeRequirement = 'Xcode $kXcodeRequiredVersionMajor.$kXcodeRequiredVersionMinor or greater is required to develop for iOS.';
+const String _xcodeRequirement = 'Xcode $kXcodeRequiredVersionMajor.$kXcodeRequiredVersionMinor.$kXcodeRequiredVersionPatch or greater is required to develop for iOS.';
 
 bool _checkXcodeVersion() {
   if (!globals.platform.isMacOS) {
@@ -577,7 +631,7 @@ bool upgradePbxProjWithFlutterAssets(IosProject project, Logger logger) {
     final Match match = oldAssets.firstMatch(line);
     if (match != null) {
       if (printedStatuses.add(match.group(1))) {
-        logger.printStatus('Removing obsolete reference to ${match.group(1)} from ${project.hostAppBundleName}');
+        logger.printStatus('Removing obsolete reference to ${match.group(1)} from ${project.xcodeProject?.basename}');
       }
     } else {
       buffer.writeln(line);

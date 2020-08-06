@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+
 import 'dart:ui' show TextDirection;
 
 export 'dart:ui' show
@@ -141,7 +142,6 @@ Axis flipAxis(Axis direction) {
     case Axis.vertical:
       return Axis.horizontal;
   }
-  return null;
 }
 
 /// A direction in which boxes flow vertically.
@@ -212,7 +212,6 @@ Axis axisDirectionToAxis(AxisDirection axisDirection) {
     case AxisDirection.right:
       return Axis.horizontal;
   }
-  return null;
 }
 
 /// Returns the [AxisDirection] in which reading occurs in the given [TextDirection].
@@ -227,7 +226,6 @@ AxisDirection textDirectionToAxisDirection(TextDirection textDirection) {
     case TextDirection.ltr:
       return AxisDirection.right;
   }
-  return null;
 }
 
 /// Returns the opposite of the given [AxisDirection].
@@ -251,7 +249,6 @@ AxisDirection flipAxisDirection(AxisDirection axisDirection) {
     case AxisDirection.left:
       return AxisDirection.right;
   }
-  return null;
 }
 
 /// Returns whether traveling along the given axis direction visits coordinates
@@ -269,5 +266,4 @@ bool axisDirectionIsReversed(AxisDirection axisDirection) {
     case AxisDirection.right:
       return false;
   }
-  return null;
 }

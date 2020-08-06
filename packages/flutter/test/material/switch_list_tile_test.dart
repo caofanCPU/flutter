@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -253,5 +255,89 @@ void main() {
 
     expect(tester.getTopLeft(find.byType(Switch)).dx, 20.0); // contentPadding.end = 20
     expect(tester.getTopRight(find.text('L')).dx, 790.0); // 800 - contentPadding.start
+  });
+
+  testWidgets('SwitchListTile can autofocus unless disabled.', (WidgetTester tester) async {
+    final GlobalKey childKey = GlobalKey();
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: ListView(
+            children: <Widget>[
+              SwitchListTile(
+                value: true,
+                onChanged: (_) {},
+                title: Text('A', key: childKey),
+                autofocus: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(Focus.of(childKey.currentContext, nullOk: true).hasPrimaryFocus, isTrue);
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Material(
+          child: ListView(
+            children: <Widget>[
+              SwitchListTile(
+                value: true,
+                onChanged: null,
+                title: Text('A', key: childKey),
+                autofocus: true,
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(Focus.of(childKey.currentContext, nullOk: true).hasPrimaryFocus, isFalse);
+  });
+
+  testWidgets('SwitchListTile controlAffinity test', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Material(
+        child: SwitchListTile(
+          value: true,
+          onChanged: null,
+          secondary: Icon(Icons.info),
+          title: Text('Title'),
+          controlAffinity: ListTileControlAffinity.leading,
+        ),
+      ),
+    ));
+
+    final ListTile listTile = tester.widget(find.byType(ListTile));
+    // When controlAffinity is ListTileControlAffinity.leading, the position of
+    // Switch is at leading edge and SwitchListTile.secondary at trailing edge.
+    expect(listTile.leading.runtimeType, Switch);
+    expect(listTile.trailing.runtimeType, Icon);
+  });
+
+  testWidgets('SwitchListTile controlAffinity default value test', (WidgetTester tester) async {
+    await tester.pumpWidget(const MaterialApp(
+      home: Material(
+        child: SwitchListTile(
+          value: true,
+          onChanged: null,
+          secondary: Icon(Icons.info),
+          title: Text('Title'),
+        ),
+      ),
+    ));
+
+    final ListTile listTile = tester.widget(find.byType(ListTile));
+    // By default, value of controlAffinity is ListTileControlAffinity.platform,
+    // where the position of SwitchListTile.secondary is at leading edge and Switch
+    // at trailing edge. This also covers test for ListTileControlAffinity.trailing.
+    expect(listTile.leading.runtimeType, Icon);
+    expect(listTile.trailing.runtimeType, Switch);
   });
 }

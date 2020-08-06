@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter_test/flutter_test.dart';
@@ -103,6 +105,35 @@ void main() {
     expect(tapRecognized, isTrue);
     GestureBinding.instance.gestureArena.sweep(1);
     expect(tapRecognized, isTrue);
+
+    tap.dispose();
+  });
+
+  testGesture('Details contain the correct device kind', (GestureTester tester) {
+    final TapGestureRecognizer tap = TapGestureRecognizer();
+
+    TapDownDetails lastDownDetails;
+    TapUpDetails lastUpDetails;
+
+    tap.onTapDown = (TapDownDetails details) {
+      lastDownDetails = details;
+    };
+    tap.onTapUp = (TapUpDetails details) {
+      lastUpDetails = details;
+    };
+
+    const PointerDownEvent mouseDown =
+        PointerDownEvent(pointer: 1, kind: PointerDeviceKind.mouse);
+    const PointerUpEvent mouseUp =
+        PointerUpEvent(pointer: 1, kind: PointerDeviceKind.mouse);
+
+    tap.addPointer(mouseDown);
+    tester.closeArena(1);
+    tester.route(mouseDown);
+    expect(lastDownDetails.kind, PointerDeviceKind.mouse);
+
+    tester.route(mouseUp);
+    expect(lastUpDetails.kind, PointerDeviceKind.mouse);
 
     tap.dispose();
   });

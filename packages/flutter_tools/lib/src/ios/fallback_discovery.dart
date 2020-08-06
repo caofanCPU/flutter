@@ -4,7 +4,6 @@
 
 import 'package:meta/meta.dart';
 import 'package:vm_service/vm_service.dart';
-import 'package:vm_service/vm_service_io.dart' as vm_service_io;
 
 import '../base/io.dart';
 import '../base/logger.dart';
@@ -12,6 +11,8 @@ import '../device.dart';
 import '../mdns_discovery.dart';
 import '../protocol_discovery.dart';
 import '../reporting/reporting.dart';
+
+typedef VmServiceConnector = Future<VmService> Function(String, {Log log});
 
 /// A protocol for discovery of a vmservice on an attached iOS device with
 /// multiple fallbacks.
@@ -42,14 +43,15 @@ class FallbackDiscovery {
     @required Logger logger,
     @required ProtocolDiscovery protocolDiscovery,
     @required Usage flutterUsage,
-    Future<VmService> Function(String wsUri, {Log log}) vmServiceConnectUri =
-      vm_service_io.vmServiceConnectUri,
+    @required VmServiceConnector vmServiceConnectUri,
+    Duration pollingDelay,
   }) : _logger = logger,
        _mDnsObservatoryDiscovery = mDnsObservatoryDiscovery,
        _portForwarder = portForwarder,
        _protocolDiscovery = protocolDiscovery,
        _flutterUsage = flutterUsage,
-       _vmServiceConnectUri = vmServiceConnectUri;
+       _vmServiceConnectUri = vmServiceConnectUri,
+       _pollingDelay = pollingDelay ?? const Duration(seconds: 2);
 
   static const String _kEventName = 'ios-handshake';
 
@@ -58,13 +60,14 @@ class FallbackDiscovery {
   final Logger _logger;
   final ProtocolDiscovery _protocolDiscovery;
   final Usage _flutterUsage;
-  final Future<VmService> Function(String wsUri, {Log log}) _vmServiceConnectUri;
+  final VmServiceConnector  _vmServiceConnectUri;
+  final Duration _pollingDelay;
 
   /// Attempt to discover the observatory port.
   Future<Uri> discover({
     @required int assumedDevicePort,
     @required String packageId,
-    @required Device deivce,
+    @required Device device,
     @required bool usesIpv6,
     @required int hostVmservicePort,
     @required String packageName,
@@ -81,7 +84,7 @@ class FallbackDiscovery {
     try {
       final Uri result = await _mDnsObservatoryDiscovery.getObservatoryUri(
         packageId,
-        deivce,
+        device,
         usesIpv6: usesIpv6,
         hostVmservicePort: hostVmservicePort,
       );
@@ -132,7 +135,7 @@ class FallbackDiscovery {
   // Returns `null` if no connection can be made.
   Future<Uri> _attemptServiceConnection({
     @required int assumedDevicePort,
-    @required int  hostVmservicePort,
+    @required int hostVmservicePort,
     @required String packageName,
   }) async {
     int hostPort;
@@ -152,7 +155,6 @@ class FallbackDiscovery {
 
     // Attempt to connect to the VM service 5 times.
     int attempts = 0;
-    const int kDelaySeconds = 2;
     Exception firstException;
     while (attempts < 5) {
       try {
@@ -171,6 +173,10 @@ class FallbackDiscovery {
               'success',
               flutterUsage: _flutterUsage,
             ).send();
+
+            // We absolutely must dispose this vmService instance, otherwise
+            // DDS will fail to start.
+            vmService.dispose();
             return Uri.parse('http://localhost:$hostPort');
           }
         }
@@ -184,7 +190,7 @@ class FallbackDiscovery {
       // tool waits for a connection to be reasonable. If the vmservice cannot
       // be connected to in this way, the mDNS discovery must be reached
       // sooner rather than later.
-      await Future<void>.delayed(const Duration(seconds: kDelaySeconds));
+      await Future<void>.delayed(_pollingDelay);
       attempts += 1;
     }
     _logger.printTrace('Failed to connect directly, falling back to mDNS');

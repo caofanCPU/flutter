@@ -2,6 +2,7 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+import 'dart:io';
 import 'dart:ui';
 
 import 'package:flutter/material.dart';
@@ -16,7 +17,6 @@ class WindowManagerIntegrationsPage extends PageWidget {
 
   @override
   Widget build(BuildContext context) => WindowManagerBody();
-
 }
 
 class WindowManagerBody extends StatefulWidget {
@@ -35,6 +35,8 @@ class WindowManagerBodyState extends State<WindowManagerBody> {
   MethodChannel viewChannel;
   _LastTestStatus lastTestStatus = _LastTestStatus.pending;
   String lastError;
+  int id;
+  int windowClickCount = 0;
 
   @override
   Widget build(BuildContext context) {
@@ -52,11 +54,32 @@ class WindowManagerBodyState extends State<WindowManagerBody> {
             ),
           ),
           if (lastTestStatus != _LastTestStatus.pending) _statusWidget(),
-          if (viewChannel != null) RaisedButton(
-            key: const ValueKey<String>('ShowAlertDialog'),
-            child: const Text('SHOW ALERT DIALOG'),
-            onPressed: onShowAlertDialogPressed,
-          ),
+          if (viewChannel != null) ... <Widget>[
+            RaisedButton(
+              key: const ValueKey<String>('ShowAlertDialog'),
+              child: const Text('SHOW ALERT DIALOG'),
+              onPressed: onShowAlertDialogPressed,
+            ),
+            Row(
+              children: <Widget>[
+                RaisedButton(
+                  key: const ValueKey<String>('AddWindow'),
+                  child: const Text('ADD WINDOW'),
+                  onPressed: onAddWindowPressed,
+                ),
+                RaisedButton(
+                  key: const ValueKey<String>('TapWindow'),
+                  child: const Text('TAP WINDOW'),
+                  onPressed: onTapWindowPressed,
+                ),
+                if (windowClickCount > 0)
+                  Text(
+                      'Click count: $windowClickCount',
+                      key: const ValueKey<String>('WindowClickCount'),
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );
@@ -84,7 +107,7 @@ class WindowManagerBodyState extends State<WindowManagerBody> {
       });
     }
     try {
-      await viewChannel.invokeMethod<void>('showAlertDialog');
+      await viewChannel.invokeMethod<void>('showAndHideAlertDialog');
       setState(() {
         lastTestStatus = _LastTestStatus.success;
       });
@@ -96,9 +119,38 @@ class WindowManagerBodyState extends State<WindowManagerBody> {
     }
   }
 
+  Future<void> onAddWindowPressed() async {
+    try {
+      await viewChannel.invokeMethod<void>('addWindowAndWaitForClick');
+      setState(() {
+        windowClickCount++;
+      });
+    } catch(e) {
+      setState(() {
+        lastTestStatus = _LastTestStatus.error;
+        lastError = '$e';
+      });
+    }
+  }
+
+  Future<void> onTapWindowPressed() async {
+    await Future<void>.delayed(const Duration(seconds: 1));
+
+    // Dispatch a tap event on the child view inside the platform view.
+    //
+    // Android mutates `MotionEvent` instances, so in this case *do not* dispatch
+    // new instances as it won't cover the `MotionEventTracker` class in the embedding
+    // which tracks events.
+    //
+    // See the issue this prevents: https://github.com/flutter/flutter/issues/61169
+    await Process.run('input', const <String>['tap', '250', '550']);
+  }
+
   void onPlatformViewCreated(int id) {
+    this.id = id;
     setState(() {
       viewChannel = MethodChannel('simple_view/$id');
     });
   }
+
 }

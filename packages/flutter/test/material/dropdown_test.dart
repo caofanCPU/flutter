@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:math' as math;
 import 'dart:ui' show window;
 
@@ -30,6 +32,92 @@ Finder _iconRichText(Key iconKey) {
   );
 }
 
+Widget buildDropdown({
+    bool isFormField,
+    Key buttonKey,
+    String value = 'two',
+    ValueChanged<String> onChanged,
+    VoidCallback onTap,
+    Widget icon,
+    Color iconDisabledColor,
+    Color iconEnabledColor,
+    double iconSize = 24.0,
+    bool isDense = false,
+    bool isExpanded = false,
+    Widget hint,
+    Widget disabledHint,
+    Widget underline,
+    List<String> items = menuItems,
+    List<Widget> Function(BuildContext) selectedItemBuilder,
+    double itemHeight = kMinInteractiveDimension,
+    Alignment alignment = Alignment.center,
+    TextDirection textDirection = TextDirection.ltr,
+    Size mediaSize,
+    FocusNode focusNode,
+    bool autofocus = false,
+    Color focusColor,
+    Color dropdownColor,
+  }) {
+  final List<DropdownMenuItem<String>> listItems = items == null
+      ? null
+      : items.map<DropdownMenuItem<String>>((String item) {
+    return DropdownMenuItem<String>(
+      key: ValueKey<String>(item),
+      value: item,
+      child: Text(item, key: ValueKey<String>(item + 'Text')),
+    );
+  }).toList();
+
+  if (isFormField) {
+    return Form(
+      child: DropdownButtonFormField<String>(
+        key: buttonKey,
+        value: value,
+        hint: hint,
+        disabledHint: disabledHint,
+        onChanged: onChanged,
+        onTap: onTap,
+        icon: icon,
+        iconSize: iconSize,
+        iconDisabledColor: iconDisabledColor,
+        iconEnabledColor: iconEnabledColor,
+        isDense: isDense,
+        isExpanded: isExpanded,
+        // No underline attribute
+        focusNode: focusNode,
+        autofocus: autofocus,
+        focusColor: focusColor,
+        dropdownColor: dropdownColor,
+        items: listItems,
+        selectedItemBuilder: selectedItemBuilder,
+        itemHeight: itemHeight,
+      ),
+    );
+  }
+  return DropdownButton<String>(
+    key: buttonKey,
+    value: value,
+    hint: hint,
+    disabledHint: disabledHint,
+    onChanged: onChanged,
+    onTap: onTap,
+    icon: icon,
+    iconSize: iconSize,
+    iconDisabledColor: iconDisabledColor,
+    iconEnabledColor: iconEnabledColor,
+    isDense: isDense,
+    isExpanded: isExpanded,
+    underline: underline,
+    focusNode: focusNode,
+    autofocus: autofocus,
+    focusColor: focusColor,
+    dropdownColor: dropdownColor,
+    items: listItems,
+    selectedItemBuilder: selectedItemBuilder,
+    itemHeight: itemHeight,
+  );
+}
+
 Widget buildFrame({
   Key buttonKey,
   String value = 'two',
@@ -54,6 +142,7 @@ Widget buildFrame({
   bool autofocus = false,
   Color focusColor,
   Color dropdownColor,
+  bool isFormField = false,
 }) {
   return TestApp(
     textDirection: textDirection,
@@ -62,8 +151,9 @@ Widget buildFrame({
       child: Align(
         alignment: alignment,
         child: RepaintBoundary(
-          child: DropdownButton<String>(
-            key: buttonKey,
+          child: buildDropdown(
+            isFormField: isFormField,
+            buttonKey: buttonKey,
             value: value,
             hint: hint,
             disabledHint: disabledHint,
@@ -80,16 +170,9 @@ Widget buildFrame({
             autofocus: autofocus,
             focusColor: focusColor,
             dropdownColor: dropdownColor,
-            items: items == null ? null : items.map<DropdownMenuItem<String>>((String item) {
-              return DropdownMenuItem<String>(
-                key: ValueKey<String>(item),
-                value: item,
-                child: Text(item, key: ValueKey<String>(item + 'Text')),
-              );
-            }).toList(),
+            items: items,
             selectedItemBuilder: selectedItemBuilder,
-            itemHeight: itemHeight,
-          ),
+            itemHeight: itemHeight,),
         ),
       ),
     ),
@@ -176,22 +259,36 @@ void verifyPaintedShadow(Finder customPaint, int elevation) {
   );
 }
 
-Future<void> checkDropdownColor(WidgetTester tester, {Color color}) async {
+Future<void> checkDropdownColor(WidgetTester tester, {Color color, bool isFormField = false }) async {
   const String text = 'foo';
   await tester.pumpWidget(
     MaterialApp(
       home: Material(
-        child: DropdownButton<String>(
-          dropdownColor: color,
-          value: text,
-          items: const <DropdownMenuItem<String>>[
-            DropdownMenuItem<String>(
-              value: text,
-              child: Text(text),
-            ),
-          ],
-          onChanged: (_) { },
-        ),
+        child: isFormField
+            ? Form(
+                child: DropdownButtonFormField<String>(
+                  dropdownColor: color,
+                  value: text,
+                  items: const <DropdownMenuItem<String>>[
+                    DropdownMenuItem<String>(
+                      value: text,
+                      child: Text(text),
+                    ),
+                  ],
+                  onChanged: (_) {},
+                ),
+              )
+            : DropdownButton<String>(
+                dropdownColor: color,
+                value: text,
+                items: const <DropdownMenuItem<String>>[
+                  DropdownMenuItem<String>(
+                    value: text,
+                    child: Text(text),
+                  ),
+                ],
+                onChanged: (_) {},
+              ),
       ),
     ),
   );
@@ -1147,49 +1244,53 @@ void main() {
         TestSemantics.rootChild(
           children: <TestSemantics>[
             TestSemantics(
-              flags: <SemanticsFlag>[
-                SemanticsFlag.scopesRoute,
-                SemanticsFlag.namesRoute,
-              ],
-              label: 'Popup menu',
               children: <TestSemantics>[
                 TestSemantics(
+                  flags: <SemanticsFlag>[
+                    SemanticsFlag.scopesRoute,
+                    SemanticsFlag.namesRoute,
+                  ],
+                  label: 'Popup menu',
                   children: <TestSemantics>[
                     TestSemantics(
-                      flags: <SemanticsFlag>[
-                        SemanticsFlag.hasImplicitScrolling,
-                      ],
                       children: <TestSemantics>[
                         TestSemantics(
-                          label: 'one',
-                          textDirection: TextDirection.ltr,
                           flags: <SemanticsFlag>[
-                            SemanticsFlag.isFocused,
-                            SemanticsFlag.isFocusable,
+                            SemanticsFlag.hasImplicitScrolling,
                           ],
-                          tags: <SemanticsTag>[const SemanticsTag('RenderViewport.twoPane')],
-                          actions: <SemanticsAction>[SemanticsAction.tap],
-                        ),
-                        TestSemantics(
-                          label: 'two',
-                          textDirection: TextDirection.ltr,
-                          flags: <SemanticsFlag>[SemanticsFlag.isFocusable],
-                          tags: <SemanticsTag>[const SemanticsTag('RenderViewport.twoPane')],
-                          actions: <SemanticsAction>[SemanticsAction.tap],
-                        ),
-                        TestSemantics(
-                          label: 'three',
-                          textDirection: TextDirection.ltr,
-                          flags: <SemanticsFlag>[SemanticsFlag.isFocusable],
-                          tags: <SemanticsTag>[const SemanticsTag('RenderViewport.twoPane')],
-                          actions: <SemanticsAction>[SemanticsAction.tap],
-                        ),
-                        TestSemantics(
-                          label: 'four',
-                          textDirection: TextDirection.ltr,
-                          flags: <SemanticsFlag>[SemanticsFlag.isFocusable],
-                          tags: <SemanticsTag>[const SemanticsTag('RenderViewport.twoPane')],
-                          actions: <SemanticsAction>[SemanticsAction.tap],
+                          children: <TestSemantics>[
+                            TestSemantics(
+                              label: 'one',
+                              textDirection: TextDirection.ltr,
+                              flags: <SemanticsFlag>[
+                                SemanticsFlag.isFocused,
+                                SemanticsFlag.isFocusable,
+                              ],
+                              tags: <SemanticsTag>[const SemanticsTag('RenderViewport.twoPane')],
+                              actions: <SemanticsAction>[SemanticsAction.tap],
+                            ),
+                            TestSemantics(
+                              label: 'two',
+                              textDirection: TextDirection.ltr,
+                              flags: <SemanticsFlag>[SemanticsFlag.isFocusable],
+                              tags: <SemanticsTag>[const SemanticsTag('RenderViewport.twoPane')],
+                              actions: <SemanticsAction>[SemanticsAction.tap],
+                            ),
+                            TestSemantics(
+                              label: 'three',
+                              textDirection: TextDirection.ltr,
+                              flags: <SemanticsFlag>[SemanticsFlag.isFocusable],
+                              tags: <SemanticsTag>[const SemanticsTag('RenderViewport.twoPane')],
+                              actions: <SemanticsAction>[SemanticsAction.tap],
+                            ),
+                            TestSemantics(
+                              label: 'four',
+                              textDirection: TextDirection.ltr,
+                              flags: <SemanticsFlag>[SemanticsFlag.isFocusable],
+                              tags: <SemanticsTag>[const SemanticsTag('RenderViewport.twoPane')],
+                              actions: <SemanticsAction>[SemanticsAction.tap],
+                            ),
+                          ],
                         ),
                       ],
                     ),
@@ -1197,6 +1298,7 @@ void main() {
                 ),
               ],
             ),
+            TestSemantics(),
           ],
         ),
       ],
@@ -1815,8 +1917,12 @@ void main() {
     await checkDropdownColor(tester);
   });
 
-  testWidgets('DropdownButton uses dropdownColor when expanded when given', (WidgetTester tester) async {
+  testWidgets('DropdownButton uses dropdownColor when expanded', (WidgetTester tester) async {
     await checkDropdownColor(tester, color: const Color.fromRGBO(120, 220, 70, 0.8));
+  });
+
+  testWidgets('DropdownButtonFormField uses dropdownColor when expanded', (WidgetTester tester) async {
+    await checkDropdownColor(tester, color: const Color.fromRGBO(120, 220, 70, 0.8), isFormField: true);
   });
 
   testWidgets('DropdownButton hint displays properly when selectedItemBuilder is defined', (WidgetTester tester) async {
@@ -2044,8 +2150,8 @@ void main() {
                           // hard coded 16px margin in the dropdown code, so that
                           // this hint aligns "properly" with the menu.
                           return Stack(
+                            clipBehavior: Clip.none,
                             alignment: Alignment.topCenter,
-                            overflow: Overflow.visible,
                             children: <Widget>[
                               PositionedDirectional(
                                 width: constraints.maxWidth + hintPaddingOffset,
@@ -2063,6 +2169,7 @@ void main() {
                       icon: Container(),
                       items: itemValues.map<DropdownMenuItem<String>>((String value) {
                         return DropdownMenuItem<String>(
+                          value: value,
                           child: Text(value),
                         );
                       }).toList(),
@@ -2098,6 +2205,20 @@ void main() {
 
     await tester.pumpWidget(buildFrame(buttonKey: buttonKey, onChanged: onChanged, focusNode: focusNode, focusColor: const Color(0xff00ff00)));
     expect(buttonFinder, paints ..rrect(rrect: const RRect.fromLTRBXY(0.0, 0.0, 104.0, 48.0, 4.0, 4.0), color: const Color(0xff00ff00)));
+  });
+
+  testWidgets('DropdownButtonFormField can be focused, and has focusColor', (WidgetTester tester) async {
+    tester.binding.focusManager.highlightStrategy = FocusHighlightStrategy.alwaysTraditional;
+    final UniqueKey buttonKey = UniqueKey();
+    final FocusNode focusNode = FocusNode(debugLabel: 'DropdownButtonFormField');
+    await tester.pumpWidget(buildFrame(isFormField: true, buttonKey: buttonKey, onChanged: onChanged, focusNode: focusNode, autofocus: true));
+    await tester.pump(); // Pump a frame for autofocus to take effect.
+    expect(focusNode.hasPrimaryFocus, isTrue);
+    final Finder buttonFinder = find.descendant(of: find.byKey(buttonKey), matching: find.byType(InputDecorator));
+    expect(buttonFinder, paints ..rrect(rrect: const RRect.fromLTRBXY(0.0, 12.0, 800.0, 60.0, 4.0, 4.0), color: const Color(0x1f000000)));
+
+    await tester.pumpWidget(buildFrame(isFormField: true, buttonKey: buttonKey, onChanged: onChanged, focusNode: focusNode, focusColor: const Color(0xff00ff00)));
+    expect(buttonFinder, paints ..rrect(rrect: const RRect.fromLTRBXY(0.0, 12.0, 800.0, 60.0, 4.0, 4.0), color: const Color(0xff00ff00)));
   });
 
   testWidgets("DropdownButton won't be focused if not enabled", (WidgetTester tester) async {
@@ -2223,7 +2344,7 @@ void main() {
     final Element element = tester.element(find.byKey(const ValueKey<String>('two')).last);
     final FocusNode node = Focus.of(element);
     expect(node.hasFocus, isTrue);
-  }, skip: kIsWeb);
+  }, skip: isBrowser); // https://github.com/flutter/flutter/issues/55320
 
   testWidgets('Selected element is correctly focused with dropdown that more items than fit on the screen', (WidgetTester tester) async {
     final FocusNode focusNode = FocusNode(debugLabel: 'DropdownButton');
@@ -2286,7 +2407,7 @@ void main() {
     final Element element = tester.element(find.byKey(const ValueKey<int>(42)).last);
     final FocusNode node = Focus.of(element);
     expect(node.hasFocus, isTrue);
-  }, skip: kIsWeb);
+  }, skip: isBrowser); // https://github.com/flutter/flutter/issues/55320
 
   testWidgets("Having a focused element doesn't interrupt scroll when flung by touch", (WidgetTester tester) async {
     final FocusNode focusNode = FocusNode(debugLabel: 'DropdownButton');
@@ -2360,7 +2481,7 @@ void main() {
     // Scrolling to the top again has removed the one the focus was on from the
     // tree, causing it to lose focus.
     expect(Focus.of(tester.element(find.byKey(const ValueKey<int>(91)).last)).hasPrimaryFocus, isFalse);
-  }, skip: kIsWeb);
+  }, skip: isBrowser); // https://github.com/flutter/flutter/issues/55320
 
   testWidgets('DropdownButton onTap callback is called when defined', (WidgetTester tester) async {
     int dropdownButtonTapCounter = 0;

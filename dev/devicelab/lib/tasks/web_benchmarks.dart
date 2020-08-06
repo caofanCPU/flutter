@@ -34,9 +34,7 @@ Future<TaskResult> runWebBenchmark({ @required bool useCanvasKit }) async {
       '--profile',
       '-t',
       'lib/web_benchmarks.dart',
-    ], environment: <String, String>{
-      'FLUTTER_WEB': 'true',
-    });
+    ]);
     final Completer<List<Map<String, dynamic>>> profileData = Completer<List<Map<String, dynamic>>>();
     final List<Map<String, dynamic>> collectedProfiles = <Map<String, dynamic>>[];
     List<String> benchmarks;
@@ -65,15 +63,14 @@ Future<TaskResult> runWebBenchmark({ @required bool useCanvasKit }) async {
             server.close();
           }
 
-          final BlinkTraceSummary traceSummary = BlinkTraceSummary.fromJson(latestPerformanceTrace);
-
-          // Trace summary can be null if the benchmark is not frame-based, such as RawRecorder.
-          if (traceSummary != null) {
+          // Trace data is null when the benchmark is not frame-based, such as RawRecorder.
+          if (latestPerformanceTrace != null) {
+            final BlinkTraceSummary traceSummary = BlinkTraceSummary.fromJson(latestPerformanceTrace);
             profile['totalUiFrame.average'] = traceSummary.averageTotalUIFrameTime.inMicroseconds;
             profile['scoreKeys'] ??= <dynamic>[]; // using dynamic for consistency with JSON
             profile['scoreKeys'].add('totalUiFrame.average');
+            latestPerformanceTrace = null;
           }
-          latestPerformanceTrace = null;
           collectedProfiles.add(profile);
           return Response.ok('Profile received');
         } else if (request.requestedUri.path.endsWith('/start-performance-tracing')) {
@@ -102,6 +99,13 @@ Future<TaskResult> runWebBenchmark({ @required bool useCanvasKit }) async {
             profileData.complete(collectedProfiles);
             return Response.notFound('Finished running benchmarks.');
           }
+        } else if (request.requestedUri.path.endsWith('/print-to-console')) {
+          // A passthrough used by
+          // `dev/benchmarks/macrobenchmarks/lib/web_benchmarks.dart`
+          // to print information.
+          final String message = await request.readAsString();
+          print('[Gallery] $message');
+          return Response.ok('Reported.');
         } else {
           return Response.notFound(
               'This request is not handled by the profile-data handler.');

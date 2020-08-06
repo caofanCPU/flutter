@@ -2,6 +2,8 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui';
 
 import 'package:flutter/foundation.dart';
@@ -571,5 +573,39 @@ void main() {
 
     semantics.dispose();
     SystemChannels.accessibility.setMockMessageHandler(null);
+  });
+
+  testWidgets('RadioListTile can autofocus unless disabled.', (WidgetTester tester) async {
+    final GlobalKey childKey = GlobalKey();
+
+    await tester.pumpWidget(
+      wrap(
+        child: RadioListTile<int>(
+          value: 1,
+          groupValue: 2,
+          onChanged: (_) {},
+          title: Text('Title', key: childKey),
+          autofocus: true,
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(Focus.of(childKey.currentContext, nullOk: true).hasPrimaryFocus, isTrue);
+
+    await tester.pumpWidget(
+      wrap(
+        child: RadioListTile<int>(
+          value: 1,
+          groupValue: 2,
+          onChanged: null,
+          title: Text('Title', key: childKey),
+          autofocus: true,
+        ),
+      ),
+    );
+
+    await tester.pump();
+    expect(Focus.of(childKey.currentContext, nullOk: true).hasPrimaryFocus, isFalse);
   });
 }

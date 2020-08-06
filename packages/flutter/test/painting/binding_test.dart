@@ -2,9 +2,12 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'dart:ui' as ui;
 
 import 'package:flutter/foundation.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:flutter/widgets.dart';
@@ -87,7 +90,7 @@ class TestBindingBase implements BindingBase {
   ui.Window get window => throw UnimplementedError();
 }
 
-class TestPaintingBinding extends TestBindingBase with ServicesBinding, PaintingBinding {
+class TestPaintingBinding extends TestBindingBase with SchedulerBinding, ServicesBinding, PaintingBinding {
 
   @override
   final FakeImageCache imageCache = FakeImageCache();

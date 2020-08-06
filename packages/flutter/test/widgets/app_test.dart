@@ -2,21 +2,27 @@
 // Use of this source code is governed by a BSD-style license that can be
 // found in the LICENSE file.
 
+// @dart = 2.8
+
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/widgets.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-class TestAction extends Action {
-  TestAction() : super(key);
+class TestIntent extends Intent {
+  const TestIntent();
+}
+
+class TestAction extends Action<Intent> {
+  TestAction();
 
   static const LocalKey key = ValueKey<Type>(TestAction);
 
   int calls = 0;
 
   @override
-  void invoke(FocusNode node, Intent intent) {
+  void invoke(Intent intent) {
     calls += 1;
   }
 }
@@ -67,11 +73,11 @@ void main() {
     await tester.pumpWidget(
       WidgetsApp(
         key: key,
-        actions: <LocalKey, ActionFactory>{
-          TestAction.key: () => action,
+        actions: <Type, Action<Intent>>{
+          TestIntent: action,
         },
         shortcuts: <LogicalKeySet, Intent> {
-          LogicalKeySet(LogicalKeyboardKey.space): const Intent(TestAction.key),
+          LogicalKeySet(LogicalKeyboardKey.space): const TestIntent(),
         },
         builder: (BuildContext context, Widget child) {
           return Material(
@@ -173,6 +179,8 @@ void main() {
           'FlutterError\n'
           '   Could not find a generator for route RouteSettings("/path", null)\n'
           '   in the _WidgetsAppState.\n'
+          '   Make sure your root app widget has provided a way to generate\n'
+          '   this route.\n'
           '   Generators for routes are searched for in the following order:\n'
           '    1. For the "/" route, the "home" property, if non-null, is used.\n'
           '    2. Otherwise, the "routes" table is used, if it has an entry for\n'
